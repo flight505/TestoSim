@@ -76,17 +76,17 @@ error: Multiple commands produce '/Users/jesper/Library/Developer/Xcode/DerivedD
    - Removed hard-coded container identifier "iCloud.com.yourcompany.TestoSim" that was causing issues
 
 3. **PK Model Calculation**
-   - Disabled advanced model by modifying `compoundFromEster` method to return nil
-   - This forces the app to fall back to the legacy calculation system
-   - Prevented crashes during initialization of the PK calculation system
+   - FIXED: Restored proper `compoundFromEster` method with safe error handling
+   - The method now safely matches TestosteroneEster names to Compound objects
+   - Added proper nil checks and safe unwrapping to prevent crashes
+   - Will fall back to legacy calculation if no matching compound is found
 
-4. **CoreDataManager Error Handling**
-   - Changed `fatalError` to `print` for Core Data loading errors to prevent app termination
-   - Allows app to continue running even if Core Data setup has issues
-
-5. **Fixed Optional Chaining Issue**
-   - Corrected `profile.biologicalSex?.rawValue` to `profile.biologicalSex.rawValue` in CoreDataManager
-   - BiologicalSex is non-optional in UserProfile struct, so optional chaining was inappropriate
+4. **Simulator Management**
+   - FIXED: Added scripts to prevent multiple simulator instances:
+     * `build-test.sh` - Builds without launching simulators
+     * `close-simulators.sh` - Closes all running simulators
+     * `launch-test.sh` - Launches in a single, specific simulator
+   - Created README.md with instructions for development workflow
 
 ## Changes to Original Specifications
 
@@ -123,5 +123,52 @@ The application currently uses the legacy calculation system instead of the more
 - These changes do not impact the user interface or core functionality of protocol management
 - The app currently works with a simplified calculation model that produces reasonable results
 - Future updates should incrementally re-enable advanced features after proper testing
+
+## Issues Remaining to Fix
+
+1. **CloudKit Integration**
+   - Re-enable CloudKit once the application is stable
+   - Properly configure container identifiers based on developer account
+
+2. **Bayesian Calibration**
+   - Implement and test the Bayesian calibration functionality
+   - Ensure it works correctly with blood test data
+
+3. **Verify PK Model Accuracy**
+   - Test that the PK model produces accurate predictions
+   - Compare with expected values from literature
+
+## Testing Plan
+
+1. **Basic Functionality**
+   - Verify application loads without crashing
+   - Test basic navigation between screens
+   - Confirm that concentration curves display correctly
+
+2. **PK Model Testing**
+   - Compare calculated levels with expected pharmacokinetics
+   - Test with different esters and dosing schedules
+   - Verify that the compoundFromEster method correctly matches compounds
+
+3. **Core Data Testing**
+   - Test saving and loading user profile data
+   - Verify that all CoreData entities are properly configured
+
+## Implementation Notes
+
+1. **Core Data Model**
+   - Using `codeGenerationType="category"` instead of "class" to avoid duplicate file generation
+   - Need to keep custom CoreData class files in the Models directory
+   - Do not regenerate CoreData files from the model editor, as it will cause conflicts
+
+2. **Error Handling**
+   - Added defensive programming with nil checks throughout the codebase
+   - Fall back to legacy calculations when advanced features are not available
+   - Log errors but avoid crashes that would disrupt user experience
+
+3. **Development Workflow**
+   - Use SweetPad for building and running when possible
+   - Use the build scripts to avoid multiple simulator instances
+   - Clean DerivedData directory when encountering build issues
 
 Last Updated: May 2, 2025

@@ -236,15 +236,23 @@ class AppDataStore: ObservableObject {
     
     // Helper method to find compound that matches the TestosteroneEster
     private func compoundFromEster(_ ester: TestosteroneEster) -> Compound? {
-        // For now, return nil to use the legacy calculation
-        // This prevents crashes during the migration and initialization
-        return nil
+        // Safely get the ester name
+        let esterName = ester.name
         
-        // Original code commented out to avoid crashes
-        // let esterName = ester.name
-        // return compoundLibrary.compounds.first { 
-        //    $0.classType == .testosterone && $0.ester?.lowercased() == esterName.lowercased()
-        // }
+        // Try to find a matching testosterone compound with this ester
+        let matchedCompound = compoundLibrary.compounds.first { compound in
+            // Make sure we only match testosterone compounds with the correct ester
+            guard compound.classType == .testosterone else { return false }
+            
+            // Safely compare esters, accounting for nil values
+            if let compoundEster = compound.ester {
+                return compoundEster.lowercased() == esterName.lowercased()
+            }
+            return false
+        }
+        
+        // If no match found, return nil to use legacy calculation
+        return matchedCompound
     }
     
     func predictedLevel(on date: Date, for injectionProtocol: InjectionProtocol) -> Double {

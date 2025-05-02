@@ -65,23 +65,19 @@ struct Compound: Identifiable, Codable, Hashable {
 
   | Ester               | k<sub>a</sub> (d⁻¹ IM) | Oral F | Notes                               |
   | ------------------- | ---------------------- | ------ | ----------------------------------- |
-  | Propionate          | 0.70                   | —      | inj q2-3 d advised ([Wikipedia][1]) |
-  | Phenylpropionate    | 0.50                   | —      | —                                   |
-  | Isocaproate         | 0.35                   | —      | —                                   |
-  | Decanoate           | 0.18                   | —      | —                                   |
-  | Hex-carb            | 0.20                   | —      | —                                   |
-  | Acetate (Tren/Test) | 1.00                   | —      | very fast                           |
-  | Stanozolol susp     | 1.50                   | —      | 24 h t½ ([Wikipedia][11])           |
-  | Oral TU             | —                      | 0.07   | t½ 1.6 h ([Wikipedia][6])           |
-  | MENT Ac             | 2.00                   | —      | 40 min IV t½ ([PubMed][14])         |
+  | Propionate          | 0.70                   | —      | Fastest IM absorption               |
+  | Phenylpropionate    | 0.50                   | —      | Moderate-fast absorption            |
+  | Isocaproate         | 0.35                   | —      | Medium absorption                   |
+  | Enanthate           | 0.30                   | —      | Medium absorption                   |
+  | Cypionate           | 0.25                   | —      | Longer absorption                   |
+  | Decanoate           | 0.18                   | —      | Extended absorption                 |
+  | Undecanoate         | 0.15                   | 0.07   | Slowest IM absorption; low oral F   |
 
-* [x] **Blend handling**: loop through each `Component` and sum concentrations.
+* [x] **Fix compoundFromEster method** to properly match TestosteroneEster to Compound with safe error handling
 
-* [x] **Bayesian calibration stub** – accept `[TimeStamp:LabT]` to refine $k_e,k_a$.
+* [ ] **Bayesian calibration** using trough samples
 
-* [ ] **Fix temporarily disabled `compoundFromEster` method** - Currently returning nil to use legacy calculation system due to initialization issues. Need to re-enable proper Compound matching.
-
-* [ ] **Test PK model accuracy** - Verify that simulation curves match expected pharmacokinetics after re-enabling advanced model.
+* [ ] **Accurate T<sub>p</sub>, C<sub>max</sub>** predictions
 
 ---
 
