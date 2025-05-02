@@ -9,12 +9,12 @@ struct ProtocolListView: View {
                 Text("No protocols yet. Tap + to add one.")
                     .foregroundColor(.secondary)
             } else {
-                ForEach(dataStore.profile.protocols) { protocol in
-                    NavigationLink(destination: ProtocolDetailView(protocol: `protocol`)) {
+                ForEach(dataStore.profile.protocols) { injectionProtocol in
+                    NavigationLink(destination: ProtocolDetailView(injectionProtocol: injectionProtocol)) {
                         VStack(alignment: .leading) {
-                            Text(`protocol`.name)
+                            Text(injectionProtocol.name)
                                 .font(.headline)
-                            Text("\(`protocol`.doseMg, specifier: "%.0f") mg \(`protocol`.ester.name) every \(`protocol`.frequencyDays, specifier: "%.1f") days")
+                            Text("\(injectionProtocol.doseMg, specifier: "%.0f") mg \(injectionProtocol.ester.name) every \(injectionProtocol.frequencyDays, specifier: "%.1f") days")
                                 .font(.subheadline)
                                 .foregroundColor(.secondary)
                         }

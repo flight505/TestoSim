@@ -97,8 +97,8 @@ class AppDataStore: ObservableObject {
         simulationData = generateSimulationData(for: selectedProtocol)
     }
     
-    func generateSimulationData(for protocol: InjectionProtocol) -> [DataPoint] {
-        let startDate = `protocol`.startDate
+    func generateSimulationData(for injectionProtocol: InjectionProtocol) -> [DataPoint] {
+        let startDate = injectionProtocol.startDate
         let endDate = startDate.addingTimeInterval(simulationDurationDays * 24 * 3600)
         let stepInterval: TimeInterval = 6 * 3600 // 6-hour intervals
         
@@ -106,7 +106,7 @@ class AppDataStore: ObservableObject {
         var currentDate = startDate
         
         while currentDate <= endDate {
-            let level = calculateLevel(at: currentDate, for: `protocol`, using: profile.calibrationFactor)
+            let level = calculateLevel(at: currentDate, for: injectionProtocol, using: profile.calibrationFactor)
             let dataPoint = DataPoint(time: currentDate, level: level)
             dataPoints.append(dataPoint)
             
@@ -116,31 +116,31 @@ class AppDataStore: ObservableObject {
         return dataPoints
     }
     
-    func calculateLevel(at targetDate: Date, for protocol: InjectionProtocol, using calibrationFactor: Double) -> Double {
-        let t_days = targetDate.timeIntervalSince(`protocol`.startDate) / (24 * 3600) // Time in days since start
+    func calculateLevel(at targetDate: Date, for injectionProtocol: InjectionProtocol, using calibrationFactor: Double) -> Double {
+        let t_days = targetDate.timeIntervalSince(injectionProtocol.startDate) / (24 * 3600) // Time in days since start
         guard t_days >= 0 else { return 0.0 }
         
-        guard `protocol`.ester.halfLifeDays > 0 else { return 0.0 } // Avoid division by zero if halfLife is 0
-        let k = log(2) / `protocol`.ester.halfLifeDays // Natural log
+        guard injectionProtocol.ester.halfLifeDays > 0 else { return 0.0 } // Avoid division by zero if halfLife is 0
+        let k = log(2) / injectionProtocol.ester.halfLifeDays // Natural log
         
         var totalLevel = 0.0
         var injIndex = 0
         
         while true {
-            let injTime_days = Double(injIndex) * `protocol`.frequencyDays
+            let injTime_days = Double(injIndex) * injectionProtocol.frequencyDays
             // Optimization: If frequency is 0 or negative, only consider the first injection
-            if `protocol`.frequencyDays <= 0 && injIndex > 0 { break }
+            if injectionProtocol.frequencyDays <= 0 && injIndex > 0 { break }
             
             if injTime_days > t_days { break } // Stop if injection time is after target time
             
             let timeDiff_days = t_days - injTime_days
             if timeDiff_days >= 0 { // Ensure we only calculate for times after injection
-                let contribution = `protocol`.doseMg * exp(-k * timeDiff_days)
+                let contribution = injectionProtocol.doseMg * exp(-k * timeDiff_days)
                 totalLevel += contribution
             }
             
             // Check for infinite loop condition if frequency is 0
-            if `protocol`.frequencyDays <= 0 { break }
+            if injectionProtocol.frequencyDays <= 0 { break }
             
             injIndex += 1
             // Safety break if index gets excessively large (e.g., > 10000) though unlikely with date limits
@@ -150,13 +150,13 @@ class AppDataStore: ObservableObject {
         return totalLevel * calibrationFactor
     }
     
-    func predictedLevel(on date: Date, for protocol: InjectionProtocol) -> Double {
-        return calculateLevel(at: date, for: `protocol`, using: profile.calibrationFactor)
+    func predictedLevel(on date: Date, for injectionProtocol: InjectionProtocol) -> Double {
+        return calculateLevel(at: date, for: injectionProtocol, using: profile.calibrationFactor)
     }
     
     func calibrateProtocol(_ protocolToCalibrate: InjectionProtocol) {
-        guard let protocolIndex = profile.protocols.firstIndex(where: { $0.id == protocolToCalibrate.id }),
-              let latestSample = protocolToCalibrate.bloodSamples.max(by: { $0.date < $1.date }) else {
+        // Find and calibrate based on the most recent blood sample
+        guard let latestSample = protocolToCalibrate.bloodSamples.max(by: { $0.date < $1.date }) else {
             return
         }
         

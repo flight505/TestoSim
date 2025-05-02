@@ -3,10 +3,10 @@ import Charts
 
 struct TestosteroneChart: View {
     @EnvironmentObject var dataStore: AppDataStore
-    let `protocol`: InjectionProtocol
+    let injectionProtocol: InjectionProtocol
     
     var simStartDate: Date {
-        dataStore.simulationData.first?.time ?? `protocol`.startDate
+        dataStore.simulationData.first?.time ?? injectionProtocol.startDate
     }
     
     var simEndDate: Date {
@@ -46,7 +46,7 @@ struct TestosteroneChart: View {
                     }
                     
                     // Injection markers
-                    ForEach(`protocol`.injectionDates(from: simStartDate, upto: simEndDate), id: \.self) { injDate in
+                    ForEach(injectionProtocol.injectionDates(from: simStartDate, upto: simEndDate), id: \.self) { injDate in
                         RuleMark(x: .value("Injection Date", injDate))
                             .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 4]))
                             .foregroundStyle(.gray)
@@ -58,7 +58,7 @@ struct TestosteroneChart: View {
                     }
                     
                     // Blood sample points
-                    ForEach(`protocol`.bloodSamples) { sample in
+                    ForEach(injectionProtocol.bloodSamples) { sample in
                         PointMark(
                             x: .value("Sample Date", sample.date),
                             y: .value("Sample Level", sample.value)
@@ -94,7 +94,7 @@ struct TestosteroneChart: View {
 }
 
 #Preview {
-    TestosteroneChart(protocol: InjectionProtocol(
+    TestosteroneChart(injectionProtocol: InjectionProtocol(
         name: "Test Protocol",
         ester: .cypionate,
         doseMg: 100,

@@ -421,38 +421,38 @@ Here is the detailed checklist:
 
 ### Story 5: UI – Protocol Detail & Simulation Chart
 
-*   [ ] **Implement ProtocolDetailView Structure:**
+*   [x] **Implement ProtocolDetailView Structure:**
     *   Create `ProtocolDetailView.swift` in the `Views` group.
     *   Add `@EnvironmentObject var dataStore: AppDataStore`.
-    *   Add `let protocol: InjectionProtocol` property (passed via `NavigationLink`).
+    *   Add `let injectionProtocol: InjectionProtocol` property (passed via `NavigationLink`).
     *   Use a `ScrollView` containing a `VStack(alignment: .leading, spacing: 16)`.
     *   Add `Text` views to display the protocol summary (Dose, Ester, Frequency).
     *   Add a placeholder where the chart will go.
     *   Use `.padding()` on the `VStack`.
-    *   Set `.navigationTitle(protocol.name)`.
+    *   Set `.navigationTitle(injectionProtocol.name)`.
     *   Add `.navigationBarTitleDisplayMode(.inline)` if preferred.
-*   [ ] **Implement Detail View Data Loading:**
+*   [x] **Implement Detail View Data Loading:**
     *   Add an `.onAppear` modifier to the main view inside `ProtocolDetailView`.
-    *   Inside `.onAppear`, call `dataStore.selectProtocol(id: protocol.id)`. This ensures the `simulationData` in the store corresponds to *this* protocol when the view appears.
-*   [ ] **Implement Last Bloodwork Display:**
+    *   Inside `.onAppear`, call `dataStore.selectProtocol(id: injectionProtocol.id)`. This ensures the `simulationData` in the store corresponds to *this* protocol when the view appears.
+*   [x] **Implement Last Bloodwork Display:**
     *   Inside the `VStack`, add logic to display info about the latest blood sample:
-    *   Find the latest sample: `let latestSample = protocol.bloodSamples.max(by: { $0.date < $1.date })`.
+    *   Find the latest sample: `let latestSample = injectionProtocol.bloodSamples.max(by: { $0.date < $1.date })`.
     *   If `latestSample` exists:
-        *   Calculate the model's prediction for that date: `let modelPrediction = dataStore.calculateLevel(at: latestSample.date, for: protocol, using: dataStore.profile.calibrationFactor)`
+        *   Calculate the model's prediction for that date: `let modelPrediction = dataStore.calculateLevel(at: latestSample.date, for: injectionProtocol, using: dataStore.profile.calibrationFactor)`
         *   Display `Text` showing the sample date, measured value (`formatValue`), and the model prediction (`formatValue`) using the profile's preferred unit (`dataStore.profile.unit`). Format the date clearly.
-*   [ ] **Implement Detail View Action Buttons:**
+*   [x] **Implement Detail View Action Buttons:**
     *   Add an `HStack` below the chart area.
     *   Add a `Button` with `Label("Add Bloodwork", systemImage: "drop.fill")`.
         *   Action: Set `@State private var showingAddBloodSheet = false` to `true`.
     *   Add a `Button` with `Label("Recalibrate Model", systemImage: "slider.horizontal.3")`.
-        *   Action: Call `dataStore.calibrateProtocol(protocol)` (implement logic in Story 6). Show confirmation alert: `@State private var showingCalibrateConfirm = false`. Set this state bool to true in the button action.
-        *   Disable this button if `protocol.bloodSamples.isEmpty`. Use `.disabled(protocol.bloodSamples.isEmpty)`.
-*   [ ] **Implement Detail View Toolbar/Sheet:**
+        *   Action: Call `dataStore.calibrateProtocol(injectionProtocol)` (implement logic in Story 6). Show confirmation alert: `@State private var showingCalibrateConfirm = false`. Set this state bool to true in the button action.
+        *   Disable this button if `injectionProtocol.bloodSamples.isEmpty`. Use `.disabled(injectionProtocol.bloodSamples.isEmpty)`.
+*   [x] **Implement Detail View Toolbar/Sheet:**
     *   Add a `.toolbar` modifier.
     *   Add `ToolbarItem(placement: .primaryAction)` with a `Button("Edit")`.
-        *   Action: Set `dataStore.protocolToEdit = protocol` and `dataStore.isPresentingProtocolForm = true`.
+        *   Action: Set `dataStore.protocolToEdit = injectionProtocol` and `dataStore.isPresentingProtocolForm = true`.
     *   Add the `.sheet(isPresented: $showingAddBloodSheet)` modifier.
-        *   Content: `AddBloodworkView(protocol: protocol)`. Pass environment object. (`AddBloodworkView` defined in Story 6).
+        *   Content: `AddBloodworkView(injectionProtocol: injectionProtocol)`. Pass environment object. (`AddBloodworkView` defined in Story 6).
     *   Add the `.alert("Calibration Updated", isPresented: $showingCalibrateConfirm)` modifier with a dismiss Button("OK").
 *   [x] **Implement TestosteroneChart View:**
     *   Create `TestosteroneChart.swift` in the `Views` group (or embed code directly in `ProtocolDetailView`).
@@ -488,33 +488,33 @@ Here is the detailed checklist:
 
 ### Story 6: UI – Add Bloodwork and Calibration
 
-*   [ ] **Implement AddBloodworkView Structure:**
+*   [x] **Implement AddBloodworkView Structure:**
     *   Create `AddBloodworkView.swift` in the `Views` group.
     *   Add `@EnvironmentObject var dataStore: AppDataStore`.
     *   Add `@Environment(\.dismiss) var dismiss`.
-    *   Add `let protocol: InjectionProtocol`.
+    *   Add `let injectionProtocol: InjectionProtocol`.
     *   Add `@State private var date: Date = Date()`.
     *   Add `@State private var valueText: String = ""`.
     *   Add `@State private var selectedUnit: String = "ng/dL"`. // Default or initialize from profile.unit
     *   Use a `NavigationView` (to get a toolbar in the sheet). Inside, use a `Form`. Set a `.navigationTitle("Add Blood Test Result")`.
-*   [ ] **Implement AddBloodworkView Fields:**
-    *   Inside the `Form`, add a `DatePicker("Date", selection: $date, in: protocol.startDate..., displayedComponents: [.date, .hourAndMinute])`. Limit the range from protocol start date onwards.
+*   [x] **Implement AddBloodworkView Fields:**
+    *   Inside the `Form`, add a `DatePicker("Date", selection: $date, in: injectionProtocol.startDate..., displayedComponents: [.date, .hourAndMinute])`. Limit the range from protocol start date onwards.
     *   Add a `TextField("Testosterone Level", text: $valueText)`. Use `.keyboardType(.decimalPad)`.
     *   Add a `Picker("Unit", selection: $selectedUnit)` with `Text("ng/dL").tag("ng/dL")` and `Text("nmol/L").tag("nmol/L")`.
-*   [ ] **Implement AddBloodworkView Save/Cancel Toolbar:**
+*   [x] **Implement AddBloodworkView Save/Cancel Toolbar:**
     *   Add a `.toolbar` to the `NavigationView`.
     *   Add `ToolbarItem(placement: .navigationBarLeading)` with a `Button("Cancel") { dismiss() }`.
     *   Add `ToolbarItem(placement: .navigationBarTrailing)` with a `Button("Save") { saveBloodwork() }`. Disable the Save button if `valueText` is empty or not a valid number: `.disabled(Double(valueText) == nil)`.
-*   [ ] **Implement AddBloodworkView Save Logic:**
+*   [x] **Implement AddBloodworkView Save Logic:**
     *   Create `private func saveBloodwork()`.
     *   Inside the function:
         1.  Guard that `valueText` can be converted to a `Double`, else return. `guard let value = Double(valueText) else { return }`.
         2.  Create a `newSample = BloodSample(date: date, value: value, unit: selectedUnit)`.
-        3.  Find the index of the current `protocol` in `dataStore.profile.protocols`.
+        3.  Find the index of the current `injectionProtocol` in `dataStore.profile.protocols`.
         4.  If found, append `newSample` to `dataStore.profile.protocols[index].bloodSamples`.
         5.  Call `dataStore.saveProfile()`.
         6.  Call `dismiss()`.
-*   [ ] **Implement Calibration Logic Function:**
+*   [x] **Implement Calibration Logic Function:**
     *   Implement the `func calibrateProtocol(_ protocolToCalibrate: InjectionProtocol)` method in `AppDataStore`.
     *   Inside the function:
         1.  Find the protocol in the `profile.protocols` array using `protocolToCalibrate.id`. Ensure it exists.
@@ -525,8 +525,8 @@ Here is the detailed checklist:
         6.  Update the profile's factor: `profile.calibrationFactor *= adjustmentRatio`.
         7.  Call `recalcSimulation()` to update the chart data with the new factor.
         8.  Call `saveProfile()` to persist the new factor.
-*   [ ] **Connect Calibration UI:**
-    *   Verify the "Recalibrate Model" button in `ProtocolDetailView` correctly calls `dataStore.calibrateProtocol(protocol)` and sets the state variable to show the confirmation alert.
+*   [x] **Connect Calibration UI:**
+    *   Verify the "Recalibrate Model" button in `ProtocolDetailView` correctly calls `dataStore.calibrateProtocol(injectionProtocol)` and sets the state variable to show the confirmation alert.
 
 ---
 
