@@ -7,26 +7,15 @@ class CoreDataManager {
     
     // MARK: - Core Data stack
     
-    lazy var persistentContainer: NSPersistentCloudKitContainer = {
-        let container = NSPersistentCloudKitContainer(name: "TestoSim")
-        
-        // Configure the CloudKit integration
-        guard let description = container.persistentStoreDescriptions.first else {
-            fatalError("Failed to retrieve a persistent store description.")
-        }
-        
-        description.cloudKitContainerOptions = NSPersistentCloudKitContainerOptions(
-            containerIdentifier: "iCloud.com.yourcompany.TestoSim"
-        )
-        
-        // Set sync policy to manual - allows user to toggle sync
-        description.cloudKitContainerOptions?.databaseScope = .private
+    lazy var persistentContainer: NSPersistentContainer = {
+        // Use a regular NSPersistentContainer instead of CloudKit to avoid crashes
+        let container = NSPersistentContainer(name: "TestoSim")
         
         // Initialize the Core Data stack
         container.loadPersistentStores(completionHandler: { (storeDescription, error) in
             if let error = error as NSError? {
                 // Replace this implementation with code to handle the error appropriately.
-                fatalError("Unresolved error \(error), \(error.userInfo)")
+                print("Unresolved error \(error), \(error.userInfo)")
             }
         })
         
@@ -60,21 +49,7 @@ class CoreDataManager {
     // MARK: - iCloud Sync Control
     
     func enableCloudSync(_ enable: Bool) {
-        guard let description = persistentContainer.persistentStoreDescriptions.first,
-              let options = description.cloudKitContainerOptions else {
-            return
-        }
-        
-        if enable {
-            // Set up CloudKit sync
-            options.databaseScope = .private
-        } else {
-            // Disable CloudKit sync
-            description.cloudKitContainerOptions = nil
-        }
-        
-        // Update the persistent stores - this would ideally be done when rebuilding the stack
-        // For simplicity, we'll just update the flag for now
+        // This is now a placeholder since we're not using CloudKit
         UserDefaults.standard.set(enable, forKey: "usesICloudSync")
     }
     

@@ -12,4 +12,4 @@ import CoreData
 @objc(CDVialComponent)
 public class CDVialComponent: NSManagedObject {
 
-} 
+}

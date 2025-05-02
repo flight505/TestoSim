@@ -12,4 +12,4 @@ import CoreData
 @objc(CDInjectionProtocol)
 public class CDInjectionProtocol: NSManagedObject {
 
-} 
+}

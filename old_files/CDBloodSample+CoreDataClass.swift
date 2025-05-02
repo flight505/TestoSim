@@ -12,4 +12,4 @@ import CoreData
 @objc(CDBloodSample)
 public class CDBloodSample: NSManagedObject {
 
-} 
+}

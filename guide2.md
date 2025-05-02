@@ -79,6 +79,10 @@ struct Compound: Identifiable, Codable, Hashable {
 
 * [x] **Bayesian calibration stub** – accept `[TimeStamp:LabT]` to refine $k_e,k_a$.
 
+* [ ] **Fix temporarily disabled `compoundFromEster` method** - Currently returning nil to use legacy calculation system due to initialization issues. Need to re-enable proper Compound matching.
+
+* [ ] **Test PK model accuracy** - Verify that simulation curves match expected pharmacokinetics after re-enabling advanced model.
+
 ---
 
 ## Story 10 — User Profile 2.0 & Persistence
@@ -87,7 +91,9 @@ struct Compound: Identifiable, Codable, Hashable {
 
 * [x] Extend `UserProfile` with DOB, height cm, weight kg, biologicalSex, `usesICloudSync`; compute `bodySurfaceArea` (DuBois).
 * [ ] Migrate storage to **Core Data + CloudKit** with `NSPersistentCloudKitContainer` ([Apple Developer][18])
-* [ ] Write one-time JSON-to-CoreData migrator flag `UserDefaults.migrated = true`.
+* [x] Write one-time JSON-to-CoreData migrator flag `UserDefaults.migrated = true`.
+* [ ] **Re-enable CloudKit integration** - temporarily disabled to fix crashing issues with hardcoded container ID
+* [ ] **Test Core Data migration** - ensure smooth transitions from JSON to CoreData storage
 
 ---
 

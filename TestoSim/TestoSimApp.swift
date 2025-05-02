@@ -7,7 +7,11 @@
 
 import SwiftUI
 import CoreData
-import CloudKit
+#if os(iOS)
+import UIKit
+#elseif os(macOS)
+import AppKit
+#endif
 
 @main
 struct TestoSimApp: App {
@@ -17,13 +21,7 @@ struct TestoSimApp: App {
     private let coreDataManager = CoreDataManager.shared
     
     init() {
-        // Prepare CloudKit setup through entitlements
-        if let identifier = Bundle.main.infoDictionary?["com.apple.developer.icloud-container-identifiers"] as? [String],
-           !identifier.isEmpty {
-            print("CloudKit container identifier: \(identifier)")
-        } else {
-            print("CloudKit container identifier not found in entitlements")
-        }
+        print("TestoSim is starting up...")
     }
     
     var body: some Scene {
@@ -31,10 +29,17 @@ struct TestoSimApp: App {
             ContentView()
                 .environmentObject(dataStore)
                 .environment(\.managedObjectContext, coreDataManager.persistentContainer.viewContext)
+                #if os(iOS)
                 .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in
                     // Save when app moves to background
                     coreDataManager.saveContext()
                 }
+                #elseif os(macOS)
+                .onReceive(NotificationCenter.default.publisher(for: NSApplication.willResignActiveNotification)) { _ in
+                    // Save when app moves to background
+                    coreDataManager.saveContext()
+                }
+                #endif
         }
     }
 }

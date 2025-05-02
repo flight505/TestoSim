@@ -12,4 +12,4 @@ import CoreData
 @objc(CDVialBlend)
 public class CDVialBlend: NSManagedObject {
 
-} 
+}

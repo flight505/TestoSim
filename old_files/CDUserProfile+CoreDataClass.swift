@@ -12,4 +12,4 @@ import CoreData
 @objc(CDUserProfile)
 public class CDUserProfile: NSManagedObject {
 
-} 
+}

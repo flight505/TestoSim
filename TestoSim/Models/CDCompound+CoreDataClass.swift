@@ -12,4 +12,4 @@ import CoreData
 @objc(CDCompound)
 public class CDCompound: NSManagedObject {
 
-}
+} 

@@ -12,6 +12,7 @@ class AppDataStore: ObservableObject {
     @Published var compoundLibrary = CompoundLibrary()
     
     // Core Data manager
+    private static let coreDataManager = CoreDataManager.shared
     private let coreDataManager = CoreDataManager.shared
     
     // Add PKModel instance
@@ -28,10 +29,17 @@ class AppDataStore: ObservableObject {
     }
     
     init() {
-        // Check if migration has occurred
+        // Initialize profile with a default empty profile first
+        self.profile = UserProfile()
+        
+        // Now we can safely use static methods that do not require self
         if UserDefaults.standard.bool(forKey: "migrated") {
             // Load profile from Core Data
-            self.profile = loadProfileFromCoreData() ?? createDefaultProfile()
+            if let loadedProfile = AppDataStore.loadProfileFromCoreData() {
+                self.profile = loadedProfile
+            } else {
+                self.profile = AppDataStore.createDefaultProfile()
+            }
         } else {
             // Try to load profile from UserDefaults (old method)
             if let savedData = UserDefaults.standard.data(forKey: "userProfileData"),
@@ -44,7 +52,7 @@ class AppDataStore: ObservableObject {
                 }
             } else {
                 // Create default profile with a sample protocol
-                self.profile = createDefaultProfile()
+                self.profile = AppDataStore.createDefaultProfile()
             }
         }
         
@@ -57,8 +65,8 @@ class AppDataStore: ObservableObject {
         recalcSimulation()
     }
     
-    private func createDefaultProfile() -> UserProfile {
-        let profile = UserProfile()
+    private static func createDefaultProfile() -> UserProfile {
+        var profile = UserProfile()
         let defaultProtocol = InjectionProtocol(
             name: "Default TRT",
             ester: .cypionate,
@@ -70,7 +78,7 @@ class AppDataStore: ObservableObject {
         return profile
     }
     
-    private func loadProfileFromCoreData() -> UserProfile? {
+    private static func loadProfileFromCoreData() -> UserProfile? {
         let context = coreDataManager.persistentContainer.viewContext
         let fetchRequest: NSFetchRequest<CDUserProfile> = CDUserProfile.fetchRequest()
         
@@ -228,11 +236,15 @@ class AppDataStore: ObservableObject {
     
     // Helper method to find compound that matches the TestosteroneEster
     private func compoundFromEster(_ ester: TestosteroneEster) -> Compound? {
-        // Map from TestosteroneEster to Compound - looking up by name match
-        let esterName = ester.name
-        return compoundLibrary.compounds.first { 
-            $0.classType == .testosterone && $0.ester?.lowercased() == esterName.lowercased()
-        }
+        // For now, return nil to use the legacy calculation
+        // This prevents crashes during the migration and initialization
+        return nil
+        
+        // Original code commented out to avoid crashes
+        // let esterName = ester.name
+        // return compoundLibrary.compounds.first { 
+        //    $0.classType == .testosterone && $0.ester?.lowercased() == esterName.lowercased()
+        // }
     }
     
     func predictedLevel(on date: Date, for injectionProtocol: InjectionProtocol) -> Double {

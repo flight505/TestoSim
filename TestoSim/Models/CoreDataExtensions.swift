@@ -257,16 +257,16 @@ extension Compound {
         }
         
         // Default values for dictionaries if serialized data not available
-        var bioavailability: [Route: Double] = [.intramuscular: 1.0]
-        var absorptionRates: [Route: Double] = [.intramuscular: 0.7]
+        let bioavailability: [Route: Double] = [.intramuscular: 1.0]
+        let absorptionRates: [Route: Double] = [.intramuscular: 0.7]
         
         // Deserialize the dictionary data if available
-        if let bioData = cdCompound.routeBioavailabilityData {
+        if cdCompound.routeBioavailabilityData != nil {
             // We would implement proper deserialization here
             // For now, using default values
         }
         
-        if let kaData = cdCompound.routeKaData {
+        if cdCompound.routeKaData != nil {
             // We would implement proper deserialization here
             // For now, using default values
         }
