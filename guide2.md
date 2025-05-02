@@ -3,19 +3,36 @@
 ## Progress Summary
 | Story | Description | Status |
 |-------|-------------|--------|
-| 8 | Compound Library & Blends | ✅ 100% Complete |
-| 9 | Refined PK Engine | ⚠️ 90% Complete (Tp, Cmax pending) |
-| 10 | User Profile 2.0 & Persistence | ⚠️ 40% Complete (CloudKit integration needed) |
+| 8 | Compound Library & Blends | ⚠️ 70% Complete (UI missing) |
+| 9 | Refined PK Engine | ⚠️ 75% Complete (UI for features missing) |
+| 10 | User Profile 2.0 & Persistence | ⚠️ 60% Complete (CloudKit integration needed) |
 | 11 | Notifications & Adherence | ❌ 0% Not Started |
 | 12 | Cycle Builder | ❌ 0% Not Started |
 | 13 | AI Insights | ❌ 0% Not Started |
 | 14 | UI/UX Polish & Animations | ❌ 0% Not Started |
 | 15 | Testing & Validation | ❌ 0% Not Started |
 
+## Missing Frontend Implementations
+
+The following backend features have been implemented but need UI components:
+
+| Feature | Backend Status | Frontend Status | Description |
+|---------|---------------|-----------------|-------------|
+| Compound Library & Blends | ✅ Complete | ❌ Missing | Need UI for selecting from full compound library instead of just TestosteroneEster |
+| VialBlend Presets | ✅ Complete | ❌ Missing | No UI to select pre-defined commercial blends (Sustanon etc.) |
+| Bayesian Calibration Details | ✅ Complete | ⚠️ Partial | Basic calibration button exists, but no UI for viewing detailed results or parameters |
+| Route Selection | ✅ Complete | ❌ Missing | Cannot select administration route (IM, SC, oral, transdermal) in protocol form |
+| Two-Compartment Toggle | ✅ Complete | ❌ Missing | No UI control to enable more accurate two-compartment model |
+| Allometric Scaling Info | ✅ Complete | ⚠️ Partial | Profile collects user measurements but no indication how they affect calculations |
+| CloudKit Sync Toggle | ⚠️ Partial | ✅ Added | Toggle exists but likely non-functional until backend integration fixed |
+
 **Priority Tasks:**
-1. Complete the Tp, Cmax predictions in the PK Engine
-2. Re-enable CloudKit integration for data persistence  
-3. Implement notification system for injection adherence
+1. Add UI for compound library and blend selection in protocol form
+2. Add route selection dropdown to protocol form
+3. Create CalibrationResultView to show detailed Bayesian calibration results
+4. Complete the Tp, Cmax predictions in the PK Engine
+5. Re-enable CloudKit integration for data persistence
+6. Implement notification system for injection adherence
 
 ---
 
@@ -45,6 +62,10 @@
   * [x] 1-Testosterone (DHB) cypionate ≈8 d (class analogue) ([Wikipedia][15])
 * [x] **Define `VialBlend` constants** for: Sustanon 250/350/400, Winstrol Susp 50, Masteron P 100 & E 200, Primobolan E 100, Tren Susp 50, Tren A 100, Tren E 200, Tren Hex 76, Tren Mix 150, Cut-Stack 150 & 250, MENT Ac 50, DHB Cyp 100 (per-mL mg in guide's table).
 * [x] **Library helpers**: `blends(containing:)`, `class(is:)`, `route(_:)`, and half-life range filters.
+* [ ] **UI: Create CompoundView** to browse and select from all compounds.
+* [ ] **UI: Create VialBlendView** to browse and select from pre-defined blends.
+* [ ] **UI: Update ProtocolFormView** to allow selection of any Compound or VialBlend instead of just TestosteroneEster.
+* [ ] **UI: Add route selection** dropdown to protocol form for choosing administration route.
 
 ```swift
 struct Compound: Identifiable, Codable, Hashable {
@@ -103,6 +124,10 @@ struct Compound: Identifiable, Codable, Hashable {
   * Includes correlation calculation to evaluate model fit quality
 
 * [ ] **Accurate T<sub>p</sub>, C<sub>max</sub>** predictions
+
+* [ ] **UI: Create CalibrationResultView** to show detailed Bayesian calibration results including correlation coefficient and parameter adjustments.
+* [ ] **UI: Add two-compartment model toggle** in settings to enable/disable more accurate but intensive calculations.
+* [ ] **UI: Add explainer for allometric scaling** to inform users how their physical measurements improve calculation accuracy.
 
 ---
 
