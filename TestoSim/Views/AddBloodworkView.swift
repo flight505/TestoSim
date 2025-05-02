@@ -16,8 +16,12 @@ struct AddBloodworkView: View {
                 Section(header: Text("Blood Test Details")) {
                     DatePicker("Date", selection: $date, in: injectionProtocol.startDate..., displayedComponents: [.date, .hourAndMinute])
                     
+                    #if os(iOS)
                     TextField("Testosterone Level", text: $valueText)
                         .keyboardType(.decimalPad)
+                    #else
+                    TextField("Testosterone Level", text: $valueText)
+                    #endif
                     
                     Picker("Unit", selection: $selectedUnit) {
                         Text("ng/dL").tag("ng/dL")

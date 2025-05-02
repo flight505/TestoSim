@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import CoreData
 
 @MainActor
 class AppDataStore: ObservableObject {
@@ -9,6 +10,9 @@ class AppDataStore: ObservableObject {
     @Published var isPresentingProtocolForm = false
     @Published var protocolToEdit: InjectionProtocol?
     @Published var compoundLibrary = CompoundLibrary()
+    
+    // Core Data manager
+    private let coreDataManager = CoreDataManager.shared
     
     // Add PKModel instance
     private let pkModel = PKModel(useTwoCompartmentModel: false)
@@ -24,21 +28,24 @@ class AppDataStore: ObservableObject {
     }
     
     init() {
-        // Try to load profile from UserDefaults
-        if let savedData = UserDefaults.standard.data(forKey: "userProfileData"),
-           let decodedProfile = try? JSONDecoder().decode(UserProfile.self, from: savedData) {
-            self.profile = decodedProfile
+        // Check if migration has occurred
+        if UserDefaults.standard.bool(forKey: "migrated") {
+            // Load profile from Core Data
+            self.profile = loadProfileFromCoreData() ?? createDefaultProfile()
         } else {
-            // Create default profile with a sample protocol
-            self.profile = UserProfile()
-            let defaultProtocol = InjectionProtocol(
-                name: "Default TRT",
-                ester: .cypionate,
-                doseMg: 100.0,
-                frequencyDays: 7.0,
-                startDate: Date()
-            )
-            self.profile.protocols.append(defaultProtocol)
+            // Try to load profile from UserDefaults (old method)
+            if let savedData = UserDefaults.standard.data(forKey: "userProfileData"),
+               let decodedProfile = try? JSONDecoder().decode(UserProfile.self, from: savedData) {
+                self.profile = decodedProfile
+                
+                // Trigger migration to Core Data if needed
+                if !UserDefaults.standard.bool(forKey: "migrated") {
+                    coreDataManager.migrateUserProfileFromJSON()
+                }
+            } else {
+                // Create default profile with a sample protocol
+                self.profile = createDefaultProfile()
+            }
         }
         
         // Set initial selected protocol
@@ -50,9 +57,45 @@ class AppDataStore: ObservableObject {
         recalcSimulation()
     }
     
+    private func createDefaultProfile() -> UserProfile {
+        let profile = UserProfile()
+        let defaultProtocol = InjectionProtocol(
+            name: "Default TRT",
+            ester: .cypionate,
+            doseMg: 100.0,
+            frequencyDays: 7.0,
+            startDate: Date()
+        )
+        profile.protocols.append(defaultProtocol)
+        return profile
+    }
+    
+    private func loadProfileFromCoreData() -> UserProfile? {
+        let context = coreDataManager.persistentContainer.viewContext
+        let fetchRequest: NSFetchRequest<CDUserProfile> = CDUserProfile.fetchRequest()
+        
+        do {
+            let results = try context.fetch(fetchRequest)
+            if let cdProfile = results.first {
+                return UserProfile(from: cdProfile)
+            }
+        } catch {
+            print("Error fetching profile from Core Data: \(error)")
+        }
+        
+        return nil
+    }
+    
     func saveProfile() {
-        if let encodedData = try? JSONEncoder().encode(profile) {
-            UserDefaults.standard.set(encodedData, forKey: "userProfileData")
+        // If we've migrated to Core Data, use that for storage
+        if UserDefaults.standard.bool(forKey: "migrated") {
+            let context = coreDataManager.persistentContainer.viewContext
+            _ = profile.saveToCD(context: context)
+        } else {
+            // Otherwise use the old UserDefaults method
+            if let encodedData = try? JSONEncoder().encode(profile) {
+                UserDefaults.standard.set(encodedData, forKey: "userProfileData")
+            }
         }
     }
     

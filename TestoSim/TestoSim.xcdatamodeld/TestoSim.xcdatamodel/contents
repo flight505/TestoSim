@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<model type="com.apple.IDECoreDataModeler.DataModel" documentVersion="1.0" lastSavedToolsVersion="21754" systemVersion="22G91" minimumToolsVersion="Automatic" sourceLanguage="Swift" userDefinedModelVersionIdentifier="">
+    <entity name="CDBloodSample" representedClassName="CDBloodSample" syncable="YES" codeGenerationType="class">
+        <attribute name="date" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="id" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="unit" attributeType="String"/>
+        <attribute name="value" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <relationship name="injectionProtocol" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="CDInjectionProtocol" inverseName="bloodSamples" inverseEntity="CDInjectionProtocol"/>
+    </entity>
+    <entity name="CDCompound" representedClassName="CDCompound" syncable="YES" codeGenerationType="class">
+        <attribute name="classType" attributeType="String"/>
+        <attribute name="commonName" attributeType="String"/>
+        <attribute name="ester" optional="YES" attributeType="String"/>
+        <attribute name="halfLifeDays" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <attribute name="id" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="routeBioavailabilityData" optional="YES" attributeType="Binary"/>
+        <attribute name="routeKaData" optional="YES" attributeType="Binary"/>
+        <relationship name="components" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="CDVialComponent" inverseName="compound" inverseEntity="CDVialComponent"/>
+        <relationship name="protocols" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="CDInjectionProtocol" inverseName="ester" inverseEntity="CDInjectionProtocol"/>
+    </entity>
+    <entity name="CDInjectionProtocol" representedClassName="CDInjectionProtocol" syncable="YES" codeGenerationType="class">
+        <attribute name="doseMg" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <attribute name="frequencyDays" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <attribute name="id" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="name" attributeType="String"/>
+        <attribute name="notes" optional="YES" attributeType="String"/>
+        <attribute name="startDate" attributeType="Date" usesScalarValueType="NO"/>
+        <relationship name="bloodSamples" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="CDBloodSample" inverseName="injectionProtocol" inverseEntity="CDBloodSample"/>
+        <relationship name="ester" maxCount="1" deletionRule="Nullify" destinationEntity="CDCompound" inverseName="protocols" inverseEntity="CDCompound"/>
+        <relationship name="profile" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="CDUserProfile" inverseName="protocols" inverseEntity="CDUserProfile"/>
+    </entity>
+    <entity name="CDUserProfile" representedClassName="CDUserProfile" syncable="YES" codeGenerationType="class">
+        <attribute name="biologicalSex" attributeType="String"/>
+        <attribute name="calibrationFactor" attributeType="Double" defaultValueString="1.0" usesScalarValueType="YES"/>
+        <attribute name="dateOfBirth" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="heightCm" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <attribute name="id" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="name" attributeType="String"/>
+        <attribute name="unit" attributeType="String"/>
+        <attribute name="usesICloudSync" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="weight" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <relationship name="protocols" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="CDInjectionProtocol" inverseName="profile" inverseEntity="CDInjectionProtocol"/>
+    </entity>
+    <entity name="CDVialBlend" representedClassName="CDVialBlend" syncable="YES" codeGenerationType="class">
+        <attribute name="blendDescription" optional="YES" attributeType="String"/>
+        <attribute name="id" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="manufacturer" optional="YES" attributeType="String"/>
+        <attribute name="name" attributeType="String"/>
+        <relationship name="components" toMany="YES" deletionRule="Cascade" destinationEntity="CDVialComponent" inverseName="vialBlend" inverseEntity="CDVialComponent"/>
+    </entity>
+    <entity name="CDVialComponent" representedClassName="CDVialComponent" syncable="YES" codeGenerationType="class">
+        <attribute name="mgPerML" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <relationship name="compound" maxCount="1" deletionRule="Nullify" destinationEntity="CDCompound" inverseName="components" inverseEntity="CDCompound"/>
+        <relationship name="vialBlend" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="CDVialBlend" inverseName="components" inverseEntity="CDVialBlend"/>
+    </entity>
+</model> 

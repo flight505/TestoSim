@@ -29,11 +29,19 @@ struct ProtocolFormView: View {
                         }
                     }
                     
+                    #if os(iOS)
                     TextField("Dose (mg)", text: $doseMg)
                         .keyboardType(.decimalPad)
+                    #else
+                    TextField("Dose (mg)", text: $doseMg)
+                    #endif
                     
+                    #if os(iOS)
                     TextField("Frequency (days)", text: $frequencyDays)
                         .keyboardType(.decimalPad)
+                    #else
+                    TextField("Frequency (days)", text: $frequencyDays)
+                    #endif
                     
                     DatePicker("Start Date", selection: $startDate, displayedComponents: [.date])
                 }

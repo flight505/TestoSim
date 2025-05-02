@@ -862,401 +862,113 @@ File: TestoSim/Models/ProtocolModel.swift
 47: }
 
 ================
-File: TestoSim/Models/VialBlend.swift
-================
- 1: import Foundation
- 2: struct VialBlend: Identifiable, Codable, Hashable {
- 3:     struct Component: Codable, Hashable {
- 4:         let compoundID: UUID
- 5:         let mgPerML: Double
- 6:         init(compoundID: UUID, mgPerML: Double) {
- 7:             self.compoundID = compoundID
- 8:             self.mgPerML = mgPerML
- 9:         }
-10:     }
-11:     let id: UUID
-12:     var name: String
-13:     var manufacturer: String?
-14:     var description: String?
-15:     var components: [Component]
-16:     init(id: UUID = UUID(), 
-17:          name: String, 
-18:          manufacturer: String? = nil, 
-19:          description: String? = nil, 
-20:          components: [Component]) {
-21:         self.id = id
-22:         self.name = name
-23:         self.manufacturer = manufacturer
-24:         self.description = description
-25:         self.components = components
-26:     }
-27:     // Total concentration in mg/mL
-28:     var totalConcentration: Double {
-29:         components.reduce(0) { $0 + $1.mgPerML }
-30:     }
-31:     // Returns components with their actual compounds (requires CompoundLibrary lookup)
-32:     func resolvedComponents(using library: CompoundLibrary) -> [(compound: Compound, mgPerML: Double)] {
-33:         return components.compactMap { component in
-34:             guard let compound = library.compound(withID: component.compoundID) else {
-35:                 return nil
-36:             }
-37:             return (compound: compound, mgPerML: component.mgPerML)
-38:         }
-39:     }
-40:     // Creates a descriptive string representing the blend contents
-41:     func compositionDescription(using library: CompoundLibrary) -> String {
-42:         let resolved = resolvedComponents(using: library)
-43:         if resolved.isEmpty {
-44:             return "Unknown composition"
-45:         }
-46:         // Completely rewritten to avoid any string interpolation complexity
-47:         let descriptions = resolved.map { component -> String in
-48:             let name = component.compound.fullDisplayName
-49:             let dosage = Int(component.mgPerML)
-50:             return name + " " + String(dosage) + "mg/mL"
-51:         }
-52:         return descriptions.joined(separator: ", ")
-53:     }
-54: }
-
-================
-File: TestoSim/Views/AddBloodworkView.swift
-================
- 1: import SwiftUI
- 2: struct AddBloodworkView: View {
- 3:     @EnvironmentObject var dataStore: AppDataStore
- 4:     @Environment(\.dismiss) var dismiss
- 5:     let injectionProtocol: InjectionProtocol
- 6:     @State private var date: Date = Date()
- 7:     @State private var valueText: String = ""
- 8:     @State private var selectedUnit: String = "ng/dL"
- 9:     var body: some View {
-10:         NavigationView {
-11:             Form {
-12:                 Section(header: Text("Blood Test Details")) {
-13:                     DatePicker("Date", selection: $date, in: injectionProtocol.startDate..., displayedComponents: [.date, .hourAndMinute])
-14:                     TextField("Testosterone Level", text: $valueText)
-15:                         .keyboardType(.decimalPad)
-16:                     Picker("Unit", selection: $selectedUnit) {
-17:                         Text("ng/dL").tag("ng/dL")
-18:                         Text("nmol/L").tag("nmol/L")
-19:                     }
-20:                 }
-21:                 Section {
-22:                     HStack {
-23:                         Spacer()
-24:                         VStack(spacing: 4) {
-25:                             Text("Protocol: \(injectionProtocol.name)")
-26:                                 .font(.subheadline)
-27:                             Text("\(injectionProtocol.doseMg, format: .number.precision(.fractionLength(0))) mg \(injectionProtocol.ester.name) every \(injectionProtocol.frequencyDays, format: .number.precision(.fractionLength(1))) days")
-28:                                 .font(.caption)
-29:                                 .foregroundColor(.secondary)
-30:                         }
-31:                         Spacer()
-32:                     }
-33:                     .padding(.vertical, 4)
-34:                 }
-35:             }
-36:             .navigationTitle("Add Blood Test Result")
-37:             .toolbar {
-38:                 ToolbarItem(placement: .cancellationAction) {
-39:                     Button("Cancel") {
-40:                         dismiss()
-41:                     }
-42:                 }
-43:                 ToolbarItem(placement: .confirmationAction) {
-44:                     Button("Save") {
-45:                         saveBloodwork()
-46:                     }
-47:                     .disabled(Double(valueText) == nil)
-48:                 }
-49:             }
-50:             .onAppear {
-51:                 // Default to user's preferred unit
-52:                 selectedUnit = dataStore.profile.unit
-53:             }
-54:         }
-55:     }
-56:     private func saveBloodwork() {
-57:         guard let value = Double(valueText) else { return }
-58:         let newSample = BloodSample(
-59:             date: date,
-60:             value: value,
-61:             unit: selectedUnit
-62:         )
-63:         if let index = dataStore.profile.protocols.firstIndex(where: { $0.id == injectionProtocol.id }) {
-64:             dataStore.profile.protocols[index].bloodSamples.append(newSample)
-65:             dataStore.saveProfile()
-66:             dismiss()
-67:         }
-68:     }
-69: }
-70: #Preview {
-71:     AddBloodworkView(injectionProtocol: InjectionProtocol(
-72:         name: "Test Protocol",
-73:         ester: .cypionate,
-74:         doseMg: 100,
-75:         frequencyDays: 7,
-76:         startDate: Date().addingTimeInterval(-30 * 24 * 3600) // 30 days ago
-77:     ))
-78:     .environmentObject(AppDataStore())
-79: }
-
-================
-File: TestoSim/Views/ProfileView.swift
-================
- 1: import SwiftUI
- 2: struct ProfileView: View {
- 3:     @EnvironmentObject var dataStore: AppDataStore
- 4:     var body: some View {
- 5:         Form {
- 6:             Section("User") {
- 7:                 TextField("Name", text: $dataStore.profile.name)
- 8:             }
- 9:             Section("Settings") {
-10:                 Picker("Preferred Unit", selection: $dataStore.profile.unit) {
-11:                     Text("ng/dL").tag("ng/dL")
-12:                     Text("nmol/L").tag("nmol/L")
-13:                 }
-14:             }
-15:             Section("Calibration") {
-16:                 Text("Model Calibration Factor: \(dataStore.profile.calibrationFactor.formatted(.number.precision(.fractionLength(2))))")
-17:                 Button("Reset Calibration to 1.0") {
-18:                     dataStore.profile.calibrationFactor = 1.0
-19:                     dataStore.recalcSimulation()
-20:                     dataStore.saveProfile()
-21:                 }
-22:             }
-23:         }
-24:         .navigationTitle("Profile Settings")
-25:         .onDisappear {
-26:             dataStore.saveProfile()
-27:         }
-28:     }
-29: }
-30: #Preview {
-31:     NavigationStack {
-32:         ProfileView()
-33:             .environmentObject(AppDataStore())
-34:     }
-35: }
-
-================
-File: TestoSim/Views/ProtocolDetailView.swift
-================
-  1: import SwiftUI
-  2: struct ProtocolDetailView: View {
-  3:     @EnvironmentObject var dataStore: AppDataStore
-  4:     @State private var showingAddBloodSheet = false
-  5:     @State private var showingCalibrateConfirm = false
-  6:     let injectionProtocol: InjectionProtocol
-  7:     var body: some View {
-  8:         ScrollView {
-  9:             VStack(alignment: .leading, spacing: 16) {
- 10:                 // Protocol summary
- 11:                 VStack(alignment: .leading, spacing: 8) {
- 12:                     Text("Dose: \(injectionProtocol.doseMg, format: .number.precision(.fractionLength(0))) mg")
- 13:                         .font(.headline)
- 14:                     Text("Ester: \(injectionProtocol.ester.name)")
- 15:                         .font(.headline)
- 16:                     Text("Frequency: Every \(injectionProtocol.frequencyDays, format: .number.precision(.fractionLength(1))) days")
- 17:                         .font(.headline)
- 18:                     Text("Started: \(formatDate(injectionProtocol.startDate))")
- 19:                         .font(.headline)
- 20:                     if let notes = injectionProtocol.notes, !notes.isEmpty {
- 21:                         Text("Notes:")
- 22:                             .font(.headline)
- 23:                             .padding(.top, 4)
- 24:                         Text(notes)
- 25:                             .font(.body)
- 26:                     }
- 27:                 }
- 28:                 .padding(.bottom, 8)
- 29:                 // Latest blood work display
- 30:                 if let latestSample = injectionProtocol.bloodSamples.max(by: { $0.date < $1.date }) {
- 31:                     VStack(alignment: .leading, spacing: 4) {
- 32:                         Text("Latest Blood Test")
- 33:                             .font(.headline)
- 34:                         let modelPrediction = dataStore.calculateLevel(at: latestSample.date, 
- 35:                                                                       for: injectionProtocol, 
- 36:                                                                       using: dataStore.profile.calibrationFactor)
- 37:                         Text("Date: \(formatDate(latestSample.date))")
- 38:                         Text("Measured: \(dataStore.formatValue(latestSample.value, unit: latestSample.unit)) \(latestSample.unit)")
- 39:                         Text("Predicted: \(dataStore.formatValue(modelPrediction, unit: dataStore.profile.unit)) \(dataStore.profile.unit)")
- 40:                     }
- 41:                     .padding(.vertical, 8)
- 42:                     .padding(.horizontal, 12)
- 43:                     .background(Color.secondary.opacity(0.1))
- 44:                     .cornerRadius(8)
- 45:                 }
- 46:                 // Simulation chart
- 47:                 TestosteroneChart(injectionProtocol: injectionProtocol)
- 48:                 // Action buttons
- 49:                 HStack(spacing: 20) {
- 50:                     Button {
- 51:                         showingAddBloodSheet = true
- 52:                     } label: {
- 53:                         Label("Add Blood Test", systemImage: "drop.fill")
- 54:                             .padding(.vertical, 8)
- 55:                             .padding(.horizontal, 12)
- 56:                     }
- 57:                     .buttonStyle(.borderedProminent)
- 58:                     Button {
- 59:                         dataStore.calibrateProtocol(injectionProtocol)
- 60:                         showingCalibrateConfirm = true
- 61:                     } label: {
- 62:                         Label("Recalibrate Model", systemImage: "slider.horizontal.3")
- 63:                             .padding(.vertical, 8)
- 64:                             .padding(.horizontal, 12)
- 65:                     }
- 66:                     .buttonStyle(.bordered)
- 67:                     .disabled(injectionProtocol.bloodSamples.isEmpty)
- 68:                 }
- 69:                 .padding(.top, 8)
- 70:             }
- 71:             .padding()
- 72:         }
- 73:         .navigationTitle(injectionProtocol.name)
- 74:         .navigationBarTitleDisplayMode(.inline)
- 75:         .toolbar {
- 76:             ToolbarItem(placement: .primaryAction) {
- 77:                 Button("Edit") {
- 78:                     dataStore.protocolToEdit = injectionProtocol
- 79:                     dataStore.isPresentingProtocolForm = true
- 80:                 }
- 81:             }
- 82:         }
- 83:         .onAppear {
- 84:             dataStore.selectProtocol(id: injectionProtocol.id)
- 85:         }
- 86:         .alert("Calibration Updated", isPresented: $showingCalibrateConfirm) {
- 87:             Button("OK", role: .cancel) { }
- 88:         }
- 89:         .sheet(isPresented: $showingAddBloodSheet) {
- 90:             AddBloodworkView(injectionProtocol: injectionProtocol)
- 91:                 .environmentObject(dataStore)
- 92:         }
- 93:     }
- 94:     private func formatDate(_ date: Date) -> String {
- 95:         let formatter = DateFormatter()
- 96:         formatter.dateStyle = .medium
- 97:         formatter.timeStyle = .none
- 98:         return formatter.string(from: date)
- 99:     }
-100: }
-101: #Preview {
-102:     NavigationStack {
-103:         ProtocolDetailView(injectionProtocol: InjectionProtocol(
-104:             name: "Test Protocol",
-105:             ester: .cypionate,
-106:             doseMg: 100,
-107:             frequencyDays: 7,
-108:             startDate: Date()
-109:         ))
-110:         .environmentObject(AppDataStore())
-111:     }
-112: }
-
-================
 File: TestoSim/Views/ProtocolFormView.swift
 ================
- 1: import SwiftUI
- 2: struct ProtocolFormView: View {
- 3:     @EnvironmentObject var dataStore: AppDataStore
- 4:     @Environment(\.dismiss) var dismiss
- 5:     var protocolToEdit: InjectionProtocol?
- 6:     @State private var name: String = ""
- 7:     @State private var selectedEster: TestosteroneEster = .cypionate
- 8:     @State private var doseMg: String = ""
- 9:     @State private var frequencyDays: String = ""
-10:     @State private var startDate: Date = Date()
-11:     @State private var notes: String = ""
-12:     var isEditing: Bool {
-13:         protocolToEdit != nil
-14:     }
-15:     var body: some View {
-16:         NavigationView {
-17:             Form {
-18:                 Section(header: Text("Protocol Details")) {
-19:                     TextField("Name", text: $name)
-20:                     Picker("Testosterone Ester", selection: $selectedEster) {
-21:                         ForEach(TestosteroneEster.all) { ester in
-22:                             Text(ester.name).tag(ester)
-23:                         }
-24:                     }
-25:                     TextField("Dose (mg)", text: $doseMg)
-26:                         .keyboardType(.decimalPad)
-27:                     TextField("Frequency (days)", text: $frequencyDays)
-28:                         .keyboardType(.decimalPad)
-29:                     DatePicker("Start Date", selection: $startDate, displayedComponents: [.date])
-30:                 }
-31:                 Section(header: Text("Notes")) {
-32:                     TextEditor(text: $notes)
-33:                         .frame(height: 100)
-34:                 }
-35:             }
-36:             .navigationTitle(isEditing ? "Edit Protocol" : "New Protocol")
-37:             .toolbar {
-38:                 ToolbarItem(placement: .cancellationAction) {
-39:                     Button("Cancel") {
-40:                         dismiss()
-41:                     }
-42:                 }
-43:                 ToolbarItem(placement: .confirmationAction) {
-44:                     Button(isEditing ? "Update" : "Add") {
-45:                         saveProtocol()
-46:                     }
-47:                     .disabled(!isValid)
-48:                 }
-49:             }
-50:             .onAppear {
-51:                 if let protocolToEdit = protocolToEdit {
-52:                     // Fill form with existing protocol data
-53:                     name = protocolToEdit.name
-54:                     selectedEster = protocolToEdit.ester
-55:                     doseMg = String(format: "%.1f", protocolToEdit.doseMg)
-56:                     frequencyDays = String(format: "%.1f", protocolToEdit.frequencyDays)
-57:                     startDate = protocolToEdit.startDate
-58:                     notes = protocolToEdit.notes ?? ""
-59:                 }
-60:             }
-61:         }
-62:     }
-63:     private var isValid: Bool {
-64:         !name.isEmpty && Double(doseMg) != nil && Double(frequencyDays) != nil
-65:     }
-66:     private func saveProtocol() {
-67:         guard let doseValue = Double(doseMg),
-68:               let frequencyValue = Double(frequencyDays) else {
-69:             return
-70:         }
-71:         if isEditing, let protocolToEdit = protocolToEdit {
-72:             var updatedProtocol = protocolToEdit
-73:             updatedProtocol.name = name
-74:             updatedProtocol.ester = selectedEster
-75:             updatedProtocol.doseMg = doseValue
-76:             updatedProtocol.frequencyDays = frequencyValue
-77:             updatedProtocol.startDate = startDate
-78:             updatedProtocol.notes = notes.isEmpty ? nil : notes
-79:             dataStore.updateProtocol(updatedProtocol)
-80:         } else {
-81:             let newProtocol = InjectionProtocol(
-82:                 name: name,
-83:                 ester: selectedEster,
-84:                 doseMg: doseValue,
-85:                 frequencyDays: frequencyValue,
-86:                 startDate: startDate,
-87:                 notes: notes.isEmpty ? nil : notes
-88:             )
-89:             dataStore.addProtocol(newProtocol)
-90:         }
-91:         dismiss()
-92:     }
-93: }
-94: #Preview {
-95:     ProtocolFormView()
-96:         .environmentObject(AppDataStore())
-97: }
+  1: import SwiftUI
+  2: struct ProtocolFormView: View {
+  3:     @EnvironmentObject var dataStore: AppDataStore
+  4:     @Environment(\.dismiss) var dismiss
+  5:     var protocolToEdit: InjectionProtocol?
+  6:     @State private var name: String = ""
+  7:     @State private var selectedEster: TestosteroneEster = .cypionate
+  8:     @State private var doseMg: String = ""
+  9:     @State private var frequencyDays: String = ""
+ 10:     @State private var startDate: Date = Date()
+ 11:     @State private var notes: String = ""
+ 12:     var isEditing: Bool {
+ 13:         protocolToEdit != nil
+ 14:     }
+ 15:     var body: some View {
+ 16:         NavigationView {
+ 17:             Form {
+ 18:                 Section(header: Text("Protocol Details")) {
+ 19:                     TextField("Name", text: $name)
+ 20:                     Picker("Testosterone Ester", selection: $selectedEster) {
+ 21:                         ForEach(TestosteroneEster.all) { ester in
+ 22:                             Text(ester.name).tag(ester)
+ 23:                         }
+ 24:                     }
+ 25:                     #if os(iOS)
+ 26:                     TextField("Dose (mg)", text: $doseMg)
+ 27:                         .keyboardType(.decimalPad)
+ 28:                     #else
+ 29:                     TextField("Dose (mg)", text: $doseMg)
+ 30:                     #endif
+ 31:                     #if os(iOS)
+ 32:                     TextField("Frequency (days)", text: $frequencyDays)
+ 33:                         .keyboardType(.decimalPad)
+ 34:                     #else
+ 35:                     TextField("Frequency (days)", text: $frequencyDays)
+ 36:                     #endif
+ 37:                     DatePicker("Start Date", selection: $startDate, displayedComponents: [.date])
+ 38:                 }
+ 39:                 Section(header: Text("Notes")) {
+ 40:                     TextEditor(text: $notes)
+ 41:                         .frame(height: 100)
+ 42:                 }
+ 43:             }
+ 44:             .navigationTitle(isEditing ? "Edit Protocol" : "New Protocol")
+ 45:             .toolbar {
+ 46:                 ToolbarItem(placement: .cancellationAction) {
+ 47:                     Button("Cancel") {
+ 48:                         dismiss()
+ 49:                     }
+ 50:                 }
+ 51:                 ToolbarItem(placement: .confirmationAction) {
+ 52:                     Button(isEditing ? "Update" : "Add") {
+ 53:                         saveProtocol()
+ 54:                     }
+ 55:                     .disabled(!isValid)
+ 56:                 }
+ 57:             }
+ 58:             .onAppear {
+ 59:                 if let protocolToEdit = protocolToEdit {
+ 60:                     // Fill form with existing protocol data
+ 61:                     name = protocolToEdit.name
+ 62:                     selectedEster = protocolToEdit.ester
+ 63:                     doseMg = String(format: "%.1f", protocolToEdit.doseMg)
+ 64:                     frequencyDays = String(format: "%.1f", protocolToEdit.frequencyDays)
+ 65:                     startDate = protocolToEdit.startDate
+ 66:                     notes = protocolToEdit.notes ?? ""
+ 67:                 }
+ 68:             }
+ 69:         }
+ 70:     }
+ 71:     private var isValid: Bool {
+ 72:         !name.isEmpty && Double(doseMg) != nil && Double(frequencyDays) != nil
+ 73:     }
+ 74:     private func saveProtocol() {
+ 75:         guard let doseValue = Double(doseMg),
+ 76:               let frequencyValue = Double(frequencyDays) else {
+ 77:             return
+ 78:         }
+ 79:         if isEditing, let protocolToEdit = protocolToEdit {
+ 80:             var updatedProtocol = protocolToEdit
+ 81:             updatedProtocol.name = name
+ 82:             updatedProtocol.ester = selectedEster
+ 83:             updatedProtocol.doseMg = doseValue
+ 84:             updatedProtocol.frequencyDays = frequencyValue
+ 85:             updatedProtocol.startDate = startDate
+ 86:             updatedProtocol.notes = notes.isEmpty ? nil : notes
+ 87:             dataStore.updateProtocol(updatedProtocol)
+ 88:         } else {
+ 89:             let newProtocol = InjectionProtocol(
+ 90:                 name: name,
+ 91:                 ester: selectedEster,
+ 92:                 doseMg: doseValue,
+ 93:                 frequencyDays: frequencyValue,
+ 94:                 startDate: startDate,
+ 95:                 notes: notes.isEmpty ? nil : notes
+ 96:             )
+ 97:             dataStore.addProtocol(newProtocol)
+ 98:         }
+ 99:         dismiss()
+100:     }
+101: }
+102: #Preview {
+103:     ProtocolFormView()
+104:         .environmentObject(AppDataStore())
+105: }
 
 ================
 File: TestoSim/TestoSim.entitlements
@@ -2135,62 +1847,306 @@ File: TestoSim/Models/ProfileModel.swift
 34: }
 
 ================
-File: TestoSim/Views/ProtocolListView.swift
+File: TestoSim/Models/VialBlend.swift
 ================
- 1: import SwiftUI
- 2: struct ProtocolListView: View {
- 3:     @EnvironmentObject var dataStore: AppDataStore
- 4:     var body: some View {
- 5:         List {
- 6:             if dataStore.profile.protocols.isEmpty {
- 7:                 Text("No protocols yet. Tap + to add one.")
- 8:                     .foregroundColor(.secondary)
- 9:             } else {
-10:                 ForEach(dataStore.profile.protocols) { injectionProtocol in
-11:                     NavigationLink(destination: ProtocolDetailView(injectionProtocol: injectionProtocol)) {
-12:                         VStack(alignment: .leading) {
-13:                             Text(injectionProtocol.name)
-14:                                 .font(.headline)
-15:                             Text("\(injectionProtocol.doseMg, format: .number.precision(.fractionLength(0))) mg \(injectionProtocol.ester.name) every \(injectionProtocol.frequencyDays, format: .number.precision(.fractionLength(1))) days")
-16:                                 .font(.subheadline)
-17:                                 .foregroundColor(.secondary)
-18:                         }
-19:                     }
-20:                 }
-21:                 .onDelete(perform: deleteItems)
-22:             }
-23:         }
-24:         .navigationTitle("Protocols")
-25:         .toolbar {
-26:             ToolbarItem(placement: .automatic) {
-27:                 NavigationLink(destination: ProfileView()) {
-28:                     Label("Profile", systemImage: "person.circle")
-29:                 }
-30:             }
-31:             ToolbarItem(placement: .primaryAction) {
-32:                 Button {
-33:                     dataStore.protocolToEdit = nil
-34:                     dataStore.isPresentingProtocolForm = true
-35:                 } label: {
-36:                     Label("Add Protocol", systemImage: "plus")
-37:                 }
-38:             }
-39:         }
-40:         .sheet(isPresented: $dataStore.isPresentingProtocolForm) {
-41:             ProtocolFormView(protocolToEdit: dataStore.protocolToEdit)
-42:                 .environmentObject(dataStore)
-43:         }
-44:     }
-45:     private func deleteItems(at offsets: IndexSet) {
-46:         dataStore.removeProtocol(at: offsets)
-47:     }
-48: }
-49: #Preview {
-50:     NavigationStack {
-51:         ProtocolListView()
-52:             .environmentObject(AppDataStore())
+ 1: import Foundation
+ 2: struct VialBlend: Identifiable, Codable, Hashable {
+ 3:     struct Component: Codable, Hashable {
+ 4:         let compoundID: UUID
+ 5:         let mgPerML: Double
+ 6:         init(compoundID: UUID, mgPerML: Double) {
+ 7:             self.compoundID = compoundID
+ 8:             self.mgPerML = mgPerML
+ 9:         }
+10:     }
+11:     let id: UUID
+12:     var name: String
+13:     var manufacturer: String?
+14:     var description: String?
+15:     var components: [Component]
+16:     init(id: UUID = UUID(), 
+17:          name: String, 
+18:          manufacturer: String? = nil, 
+19:          description: String? = nil, 
+20:          components: [Component]) {
+21:         self.id = id
+22:         self.name = name
+23:         self.manufacturer = manufacturer
+24:         self.description = description
+25:         self.components = components
+26:     }
+27:     // Total concentration in mg/mL
+28:     var totalConcentration: Double {
+29:         components.reduce(0) { $0 + $1.mgPerML }
+30:     }
+31:     // Returns components with their actual compounds (requires CompoundLibrary lookup)
+32:     func resolvedComponents(using library: CompoundLibrary) -> [(compound: Compound, mgPerML: Double)] {
+33:         return components.compactMap { component in
+34:             guard let compound = library.compound(withID: component.compoundID) else {
+35:                 return nil
+36:             }
+37:             return (compound: compound, mgPerML: component.mgPerML)
+38:         }
+39:     }
+40:     // Creates a descriptive string representing the blend contents
+41:     func compositionDescription(using library: CompoundLibrary) -> String {
+42:         let resolved = resolvedComponents(using: library)
+43:         if resolved.isEmpty {
+44:             return "Unknown composition"
+45:         }
+46:         // Completely rewritten to avoid any string interpolation complexity
+47:         let descriptions = resolved.map { component -> String in
+48:             let name = component.compound.fullDisplayName
+49:             let dosage = Int(component.mgPerML)
+50:             return name + " " + String(dosage) + "mg/mL"
+51:         }
+52:         return descriptions.joined(separator: ", ")
 53:     }
 54: }
+
+================
+File: TestoSim/Views/AddBloodworkView.swift
+================
+ 1: import SwiftUI
+ 2: struct AddBloodworkView: View {
+ 3:     @EnvironmentObject var dataStore: AppDataStore
+ 4:     @Environment(\.dismiss) var dismiss
+ 5:     let injectionProtocol: InjectionProtocol
+ 6:     @State private var date: Date = Date()
+ 7:     @State private var valueText: String = ""
+ 8:     @State private var selectedUnit: String = "ng/dL"
+ 9:     var body: some View {
+10:         NavigationView {
+11:             Form {
+12:                 Section(header: Text("Blood Test Details")) {
+13:                     DatePicker("Date", selection: $date, in: injectionProtocol.startDate..., displayedComponents: [.date, .hourAndMinute])
+14:                     #if os(iOS)
+15:                     TextField("Testosterone Level", text: $valueText)
+16:                         .keyboardType(.decimalPad)
+17:                     #else
+18:                     TextField("Testosterone Level", text: $valueText)
+19:                     #endif
+20:                     Picker("Unit", selection: $selectedUnit) {
+21:                         Text("ng/dL").tag("ng/dL")
+22:                         Text("nmol/L").tag("nmol/L")
+23:                     }
+24:                 }
+25:                 Section {
+26:                     HStack {
+27:                         Spacer()
+28:                         VStack(spacing: 4) {
+29:                             Text("Protocol: \(injectionProtocol.name)")
+30:                                 .font(.subheadline)
+31:                             Text("\(injectionProtocol.doseMg, format: .number.precision(.fractionLength(0))) mg \(injectionProtocol.ester.name) every \(injectionProtocol.frequencyDays, format: .number.precision(.fractionLength(1))) days")
+32:                                 .font(.caption)
+33:                                 .foregroundColor(.secondary)
+34:                         }
+35:                         Spacer()
+36:                     }
+37:                     .padding(.vertical, 4)
+38:                 }
+39:             }
+40:             .navigationTitle("Add Blood Test Result")
+41:             .toolbar {
+42:                 ToolbarItem(placement: .cancellationAction) {
+43:                     Button("Cancel") {
+44:                         dismiss()
+45:                     }
+46:                 }
+47:                 ToolbarItem(placement: .confirmationAction) {
+48:                     Button("Save") {
+49:                         saveBloodwork()
+50:                     }
+51:                     .disabled(Double(valueText) == nil)
+52:                 }
+53:             }
+54:             .onAppear {
+55:                 // Default to user's preferred unit
+56:                 selectedUnit = dataStore.profile.unit
+57:             }
+58:         }
+59:     }
+60:     private func saveBloodwork() {
+61:         guard let value = Double(valueText) else { return }
+62:         let newSample = BloodSample(
+63:             date: date,
+64:             value: value,
+65:             unit: selectedUnit
+66:         )
+67:         if let index = dataStore.profile.protocols.firstIndex(where: { $0.id == injectionProtocol.id }) {
+68:             dataStore.profile.protocols[index].bloodSamples.append(newSample)
+69:             dataStore.saveProfile()
+70:             dismiss()
+71:         }
+72:     }
+73: }
+74: #Preview {
+75:     AddBloodworkView(injectionProtocol: InjectionProtocol(
+76:         name: "Test Protocol",
+77:         ester: .cypionate,
+78:         doseMg: 100,
+79:         frequencyDays: 7,
+80:         startDate: Date().addingTimeInterval(-30 * 24 * 3600) // 30 days ago
+81:     ))
+82:     .environmentObject(AppDataStore())
+83: }
+
+================
+File: TestoSim/Views/ProfileView.swift
+================
+ 1: import SwiftUI
+ 2: struct ProfileView: View {
+ 3:     @EnvironmentObject var dataStore: AppDataStore
+ 4:     var body: some View {
+ 5:         Form {
+ 6:             Section("User") {
+ 7:                 TextField("Name", text: $dataStore.profile.name)
+ 8:             }
+ 9:             Section("Settings") {
+10:                 Picker("Preferred Unit", selection: $dataStore.profile.unit) {
+11:                     Text("ng/dL").tag("ng/dL")
+12:                     Text("nmol/L").tag("nmol/L")
+13:                 }
+14:             }
+15:             Section("Calibration") {
+16:                 Text("Model Calibration Factor: \(dataStore.profile.calibrationFactor.formatted(.number.precision(.fractionLength(2))))")
+17:                 Button("Reset Calibration to 1.0") {
+18:                     dataStore.profile.calibrationFactor = 1.0
+19:                     dataStore.recalcSimulation()
+20:                     dataStore.saveProfile()
+21:                 }
+22:             }
+23:         }
+24:         .navigationTitle("Profile Settings")
+25:         .onDisappear {
+26:             dataStore.saveProfile()
+27:         }
+28:     }
+29: }
+30: #Preview {
+31:     NavigationStack {
+32:         ProfileView()
+33:             .environmentObject(AppDataStore())
+34:     }
+35: }
+
+================
+File: TestoSim/Views/ProtocolDetailView.swift
+================
+  1: import SwiftUI
+  2: struct ProtocolDetailView: View {
+  3:     @EnvironmentObject var dataStore: AppDataStore
+  4:     @State private var showingAddBloodSheet = false
+  5:     @State private var showingCalibrateConfirm = false
+  6:     let injectionProtocol: InjectionProtocol
+  7:     var body: some View {
+  8:         ScrollView {
+  9:             VStack(alignment: .leading, spacing: 16) {
+ 10:                 // Protocol summary
+ 11:                 VStack(alignment: .leading, spacing: 8) {
+ 12:                     Text("Dose: \(injectionProtocol.doseMg, format: .number.precision(.fractionLength(0))) mg")
+ 13:                         .font(.headline)
+ 14:                     Text("Ester: \(injectionProtocol.ester.name)")
+ 15:                         .font(.headline)
+ 16:                     Text("Frequency: Every \(injectionProtocol.frequencyDays, format: .number.precision(.fractionLength(1))) days")
+ 17:                         .font(.headline)
+ 18:                     Text("Started: \(formatDate(injectionProtocol.startDate))")
+ 19:                         .font(.headline)
+ 20:                     if let notes = injectionProtocol.notes, !notes.isEmpty {
+ 21:                         Text("Notes:")
+ 22:                             .font(.headline)
+ 23:                             .padding(.top, 4)
+ 24:                         Text(notes)
+ 25:                             .font(.body)
+ 26:                     }
+ 27:                 }
+ 28:                 .padding(.bottom, 8)
+ 29:                 // Latest blood work display
+ 30:                 if let latestSample = injectionProtocol.bloodSamples.max(by: { $0.date < $1.date }) {
+ 31:                     VStack(alignment: .leading, spacing: 4) {
+ 32:                         Text("Latest Blood Test")
+ 33:                             .font(.headline)
+ 34:                         let modelPrediction = dataStore.calculateLevel(at: latestSample.date, 
+ 35:                                                                       for: injectionProtocol, 
+ 36:                                                                       using: dataStore.profile.calibrationFactor)
+ 37:                         Text("Date: \(formatDate(latestSample.date))")
+ 38:                         Text("Measured: \(dataStore.formatValue(latestSample.value, unit: latestSample.unit)) \(latestSample.unit)")
+ 39:                         Text("Predicted: \(dataStore.formatValue(modelPrediction, unit: dataStore.profile.unit)) \(dataStore.profile.unit)")
+ 40:                     }
+ 41:                     .padding(.vertical, 8)
+ 42:                     .padding(.horizontal, 12)
+ 43:                     .background(Color.secondary.opacity(0.1))
+ 44:                     .cornerRadius(8)
+ 45:                 }
+ 46:                 // Simulation chart
+ 47:                 TestosteroneChart(injectionProtocol: injectionProtocol)
+ 48:                 // Action buttons
+ 49:                 HStack(spacing: 20) {
+ 50:                     Button {
+ 51:                         showingAddBloodSheet = true
+ 52:                     } label: {
+ 53:                         Label("Add Blood Test", systemImage: "drop.fill")
+ 54:                             .padding(.vertical, 8)
+ 55:                             .padding(.horizontal, 12)
+ 56:                     }
+ 57:                     .buttonStyle(.borderedProminent)
+ 58:                     Button {
+ 59:                         dataStore.calibrateProtocol(injectionProtocol)
+ 60:                         showingCalibrateConfirm = true
+ 61:                     } label: {
+ 62:                         Label("Recalibrate Model", systemImage: "slider.horizontal.3")
+ 63:                             .padding(.vertical, 8)
+ 64:                             .padding(.horizontal, 12)
+ 65:                     }
+ 66:                     .buttonStyle(.bordered)
+ 67:                     .disabled(injectionProtocol.bloodSamples.isEmpty)
+ 68:                 }
+ 69:                 .padding(.top, 8)
+ 70:             }
+ 71:             .padding()
+ 72:         }
+ 73:         .navigationTitle(injectionProtocol.name)
+ 74:         #if os(iOS)
+ 75:         .navigationBarTitleDisplayMode(.inline)
+ 76:         #endif
+ 77:         .toolbar {
+ 78:             ToolbarItem(placement: .primaryAction) {
+ 79:                 Button("Edit") {
+ 80:                     dataStore.protocolToEdit = injectionProtocol
+ 81:                     dataStore.isPresentingProtocolForm = true
+ 82:                 }
+ 83:             }
+ 84:         }
+ 85:         .onAppear {
+ 86:             dataStore.selectProtocol(id: injectionProtocol.id)
+ 87:         }
+ 88:         .alert("Calibration Updated", isPresented: $showingCalibrateConfirm) {
+ 89:             Button("OK", role: .cancel) { }
+ 90:         }
+ 91:         .sheet(isPresented: $showingAddBloodSheet) {
+ 92:             AddBloodworkView(injectionProtocol: injectionProtocol)
+ 93:                 .environmentObject(dataStore)
+ 94:         }
+ 95:     }
+ 96:     private func formatDate(_ date: Date) -> String {
+ 97:         let formatter = DateFormatter()
+ 98:         formatter.dateStyle = .medium
+ 99:         formatter.timeStyle = .none
+100:         return formatter.string(from: date)
+101:     }
+102: }
+103: #Preview {
+104:     NavigationStack {
+105:         ProtocolDetailView(injectionProtocol: InjectionProtocol(
+106:             name: "Test Protocol",
+107:             ester: .cypionate,
+108:             doseMg: 100,
+109:             frequencyDays: 7,
+110:             startDate: Date()
+111:         ))
+112:         .environmentObject(AppDataStore())
+113:     }
+114: }
 
 ================
 File: TestoSim/Views/TestosteroneChart.swift
@@ -3154,6 +3110,64 @@ File: guide2.md
 239: 
 240: 
 241: [1]: https://github.com/airbnb/lottie-ios "airbnb/lottie-ios: An iOS library to natively render After Effects vector ..."
+
+================
+File: TestoSim/Views/ProtocolListView.swift
+================
+ 1: import SwiftUI
+ 2: struct ProtocolListView: View {
+ 3:     @EnvironmentObject var dataStore: AppDataStore
+ 4:     var body: some View {
+ 5:         List {
+ 6:             if dataStore.profile.protocols.isEmpty {
+ 7:                 Text("No protocols yet. Tap + to add one.")
+ 8:                     .foregroundColor(.secondary)
+ 9:             } else {
+10:                 ForEach(dataStore.profile.protocols) { injectionProtocol in
+11:                     NavigationLink(destination: ProtocolDetailView(injectionProtocol: injectionProtocol)) {
+12:                         VStack(alignment: .leading) {
+13:                             Text(injectionProtocol.name)
+14:                                 .font(.headline)
+15:                             Text("\(injectionProtocol.doseMg, format: .number.precision(.fractionLength(0))) mg \(injectionProtocol.ester.name) every \(injectionProtocol.frequencyDays, format: .number.precision(.fractionLength(1))) days")
+16:                                 .font(.subheadline)
+17:                                 .foregroundColor(.secondary)
+18:                         }
+19:                     }
+20:                 }
+21:                 .onDelete(perform: deleteItems)
+22:             }
+23:         }
+24:         .navigationTitle("Protocols")
+25:         .toolbar {
+26:             ToolbarItem(placement: .automatic) {
+27:                 NavigationLink(destination: ProfileView()) {
+28:                     Label("Profile", systemImage: "person.circle")
+29:                 }
+30:             }
+31:             ToolbarItem(placement: .primaryAction) {
+32:                 Button {
+33:                     dataStore.protocolToEdit = nil
+34:                     dataStore.isPresentingProtocolForm = true
+35:                 } label: {
+36:                     Label("Add Protocol", systemImage: "plus")
+37:                 }
+38:             }
+39:         }
+40:         .sheet(isPresented: $dataStore.isPresentingProtocolForm) {
+41:             ProtocolFormView(protocolToEdit: dataStore.protocolToEdit)
+42:                 .environmentObject(dataStore)
+43:         }
+44:     }
+45:     private func deleteItems(at offsets: IndexSet) {
+46:         dataStore.removeProtocol(at: offsets)
+47:     }
+48: }
+49: #Preview {
+50:     NavigationStack {
+51:         ProtocolListView()
+52:             .environmentObject(AppDataStore())
+53:     }
+54: }
 
 ================
 File: TestoSim/ViewModels/AppDataStore.swift
