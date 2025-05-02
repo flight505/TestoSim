@@ -1,0 +1,13 @@
+{
+    "projectPath": "TestoSim.xcodeproj",
+    "scheme": "TestoSim",
+    "destination": "platform=iOS Simulator,name=iPhone 15 Pro",
+    "configuration": "Debug",
+    "buildForRunning": true,
+    "buildSettings": {
+        "PRODUCT_BUNDLE_IDENTIFIER": "com.example.TestoSim"
+    },
+    "env": {},
+    "xcodeCommand": "/usr/bin/xcodebuild",
+    "prettifyOutput": true
+} 

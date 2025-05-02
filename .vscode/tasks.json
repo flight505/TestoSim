@@ -1,0 +1,66 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Build TestoSim",
+            "type": "shell",
+            "command": "xcodebuild",
+            "args": [
+                "-project",
+                "TestoSim.xcodeproj",
+                "-scheme",
+                "TestoSim",
+                "-destination",
+                "platform=iOS Simulator,name=iPhone 15 Pro",
+                "build"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            },
+            "problemMatcher": "$msCompile"
+        },
+        {
+            "label": "Run TestoSim",
+            "type": "shell",
+            "command": "xcodebuild",
+            "args": [
+                "-project",
+                "TestoSim.xcodeproj",
+                "-scheme",
+                "TestoSim",
+                "-destination",
+                "platform=iOS Simulator,name=iPhone 15 Pro",
+                "build",
+                "run"
+            ],
+            "group": "test",
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            },
+            "problemMatcher": "$msCompile"
+        },
+        {
+            "label": "Clean TestoSim",
+            "type": "shell",
+            "command": "xcodebuild",
+            "args": [
+                "-project",
+                "TestoSim.xcodeproj",
+                "-scheme",
+                "TestoSim",
+                "clean"
+            ],
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            },
+            "problemMatcher": "$msCompile"
+        }
+    ]
+} 
