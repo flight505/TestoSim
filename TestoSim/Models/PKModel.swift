@@ -254,28 +254,184 @@ struct PKModel {
         let originalKe = log(2) / compound.halfLifeDays
         let originalKa = defaultKa
         
-        // Stub implementation that returns slightly adjusted parameters
-        // In a real implementation, this would use more sophisticated statistical methods
-        // such as Markov Chain Monte Carlo or Maximum Likelihood Estimation
+        // Bioavailability for this route
+        let bioavailability = compound.defaultBioavailability[route] ?? 1.0
         
-        // For demonstration, adjust ke by ±10% randomly and ka by ±15% randomly
-        let keAdjustmentFactor = 1.0 + (Double.random(in: -0.1...0.1))
-        let kaAdjustmentFactor = 1.0 + (Double.random(in: -0.15...0.15))
+        // Set up parameter bounds (ke and ka can't vary too much from literature values)
+        let keMin = originalKe * 0.5  // Allow halving the elimination rate
+        let keMax = originalKe * 2.0  // Allow doubling the elimination rate
+        let kaMin = originalKa * 0.5  // Allow halving the absorption rate
+        let kaMax = originalKa * 2.0  // Allow doubling the absorption rate
         
-        let adjustedKe = originalKe * keAdjustmentFactor
-        let adjustedKa = originalKa * kaAdjustmentFactor
+        // Initial parameter guesses
+        var currentKe = originalKe
+        var currentKa = originalKa
+        var bestKe = originalKe
+        var bestKa = originalKa
+        var bestError = Double.greatestFiniteMagnitude
         
-        // Calculate a dummy correlation value (would be actual fit quality in real implementation)
-        let correlation = 0.85 + Double.random(in: 0...0.1)
+        // Function to calculate sum of squared errors for given parameters
+        func calculateError(ke: Double, ka: Double) -> Double {
+            var sumSquaredError = 0.0
+            
+            for sample in samples {
+                // Calculate predicted concentration at this sample time
+                var predictedLevel = 0.0
+                
+                for injectionDate in injectionDates {
+                    // Skip future injections
+                    guard injectionDate <= sample.timestamp else { continue }
+                    
+                    // Calculate time difference in days
+                    let timeDiffDays = sample.timestamp.timeIntervalSince(injectionDate) / (24 * 3600)
+                    guard timeDiffDays >= 0 else { continue }
+                    
+                    // Calculate concentration for this injection
+                    let vd = PKModel.defaultVolumeOfDistribution70kg * pow(weight / 70.0, 1.0)
+                    
+                    // Skip if ka and ke are too close (would cause division by zero)
+                    if abs(ka - ke) < 0.001 {
+                        continue
+                    }
+                    
+                    // One-compartment model with first-order absorption formula
+                    let factor = (dose * bioavailability * ka) / (vd * (ka - ke))
+                    let contribution = factor * (exp(-ke * timeDiffDays) - exp(-ka * timeDiffDays))
+                    
+                    predictedLevel += contribution
+                }
+                
+                // Calculate squared error for this sample
+                let error = sample.labValue - predictedLevel
+                sumSquaredError += error * error
+            }
+            
+            return sumSquaredError
+        }
+        
+        // Gradient descent parameters
+        let learningRate = 0.01
+        let iterations = 100
+        let earlyStopThreshold = 0.0001
+        
+        // Perform gradient descent optimization
+        for _ in 0..<iterations {
+            let baseError = calculateError(ke: currentKe, ka: currentKa)
+            
+            // Calculate gradient for ke
+            let keStep = currentKe * 0.01
+            let keGradient = (calculateError(ke: currentKe + keStep, ka: currentKa) - baseError) / keStep
+            
+            // Calculate gradient for ka
+            let kaStep = currentKa * 0.01
+            let kaGradient = (calculateError(ke: currentKe, ka: currentKa + kaStep) - baseError) / kaStep
+            
+            // Update parameters
+            currentKe -= learningRate * keGradient
+            currentKa -= learningRate * kaGradient
+            
+            // Keep parameters within bounds
+            currentKe = max(keMin, min(keMax, currentKe))
+            currentKa = max(kaMin, min(kaMax, currentKa))
+            
+            // Check if this is the best result so far
+            let currentError = calculateError(ke: currentKe, ka: currentKa)
+            if currentError < bestError {
+                bestError = currentError
+                bestKe = currentKe
+                bestKa = currentKa
+            }
+            
+            // Early stopping if improvement is minimal
+            if abs(baseError - currentError) < earlyStopThreshold {
+                break
+            }
+        }
+        
+        // Calculate correlation coefficient
+        let correlation = calculateCorrelation(
+            ke: bestKe,
+            ka: bestKa,
+            samples: samples,
+            injectionDates: injectionDates,
+            dose: dose,
+            bioavailability: bioavailability,
+            weight: weight
+        )
         
         return CalibrationResult(
-            adjustedKe: adjustedKe,
-            adjustedKa: adjustedKa,
+            adjustedKe: bestKe,
+            adjustedKa: bestKa,
             originalKe: originalKe,
             originalKa: originalKa,
-            halfLifeDays: log(2) / adjustedKe,
+            halfLifeDays: log(2) / bestKe,
             correlation: correlation,
             samples: samples
         )
+    }
+    
+    /// Calculate correlation between observed and predicted values
+    private func calculateCorrelation(
+        ke: Double,
+        ka: Double,
+        samples: [SamplePoint],
+        injectionDates: [Date],
+        dose: Double,
+        bioavailability: Double,
+        weight: Double
+    ) -> Double {
+        // Calculate predicted values
+        var observed: [Double] = []
+        var predicted: [Double] = []
+        
+        for sample in samples {
+            observed.append(sample.labValue)
+            
+            var predictedLevel = 0.0
+            for injectionDate in injectionDates {
+                guard injectionDate <= sample.timestamp else { continue }
+                
+                let timeDiffDays = sample.timestamp.timeIntervalSince(injectionDate) / (24 * 3600)
+                guard timeDiffDays >= 0 else { continue }
+                
+                let vd = PKModel.defaultVolumeOfDistribution70kg * pow(weight / 70.0, 1.0)
+                
+                if abs(ka - ke) < 0.001 {
+                    // For very close ka and ke, use bolus approximation
+                    let initialConcentration = (dose * bioavailability) / vd
+                    predictedLevel += initialConcentration * exp(-ke * timeDiffDays)
+                } else {
+                    let factor = (dose * bioavailability * ka) / (vd * (ka - ke))
+                    predictedLevel += factor * (exp(-ke * timeDiffDays) - exp(-ka * timeDiffDays))
+                }
+            }
+            
+            predicted.append(predictedLevel)
+        }
+        
+        // Calculate means
+        let observedMean = observed.reduce(0.0, +) / Double(observed.count)
+        let predictedMean = predicted.reduce(0.0, +) / Double(predicted.count)
+        
+        // Calculate Pearson correlation coefficient
+        var numerator = 0.0
+        var observedDenominator = 0.0
+        var predictedDenominator = 0.0
+        
+        for i in 0..<observed.count {
+            let observedDiff = observed[i] - observedMean
+            let predictedDiff = predicted[i] - predictedMean
+            
+            numerator += observedDiff * predictedDiff
+            observedDenominator += observedDiff * observedDiff
+            predictedDenominator += predictedDiff * predictedDiff
+        }
+        
+        let denominator = sqrt(observedDenominator * predictedDenominator)
+        
+        // Protect against division by zero
+        guard denominator > 0 else { return 0.0 }
+        
+        return numerator / denominator
     }
 } 
