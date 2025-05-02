@@ -8,6 +8,10 @@ class AppDataStore: ObservableObject {
     @Published var selectedProtocolID: UUID?
     @Published var isPresentingProtocolForm = false
     @Published var protocolToEdit: InjectionProtocol?
+    @Published var compoundLibrary = CompoundLibrary()
+    
+    // Add PKModel instance
+    private let pkModel = PKModel(useTwoCompartmentModel: false)
     
     let simulationDurationDays: Double = 90.0
     
@@ -117,6 +121,35 @@ class AppDataStore: ObservableObject {
     }
     
     func calculateLevel(at targetDate: Date, for injectionProtocol: InjectionProtocol, using calibrationFactor: Double) -> Double {
+        // Get compound from library that matches the ester
+        let compound = compoundFromEster(injectionProtocol.ester)
+        guard let compound = compound else {
+            // Fall back to old calculation if compound not found
+            return calculateLevelLegacy(at: targetDate, for: injectionProtocol, using: calibrationFactor)
+        }
+        
+        // Get all injection dates up to the target date
+        let injectionDates = injectionProtocol.injectionDates(
+            from: injectionProtocol.startDate.addingTimeInterval(-90 * 24 * 3600), // Include 90 days before to catch buildup
+            upto: targetDate
+        )
+        
+        // Use the new PKModel to calculate concentrations
+        let compounds = [(compound: compound, dosePerInjectionMg: injectionProtocol.doseMg)]
+        let concentrations = pkModel.protocolConcentrations(
+            at: [targetDate],
+            injectionDates: injectionDates,
+            compounds: compounds,
+            route: .intramuscular, // Default to IM for now
+            weight: profile.weight ?? 70.0, // Use profile weight or default to 70kg
+            calibrationFactor: calibrationFactor
+        )
+        
+        return concentrations.first ?? 0.0
+    }
+    
+    // Legacy calculation method for backward compatibility
+    private func calculateLevelLegacy(at targetDate: Date, for injectionProtocol: InjectionProtocol, using calibrationFactor: Double) -> Double {
         let t_days = targetDate.timeIntervalSince(injectionProtocol.startDate) / (24 * 3600) // Time in days since start
         guard t_days >= 0 else { return 0.0 }
         
@@ -150,6 +183,15 @@ class AppDataStore: ObservableObject {
         return totalLevel * calibrationFactor
     }
     
+    // Helper method to find compound that matches the TestosteroneEster
+    private func compoundFromEster(_ ester: TestosteroneEster) -> Compound? {
+        // Map from TestosteroneEster to Compound - looking up by name match
+        let esterName = ester.name
+        return compoundLibrary.compounds.first { 
+            $0.classType == .testosterone && $0.ester?.lowercased() == esterName.lowercased()
+        }
+    }
+    
     func predictedLevel(on date: Date, for injectionProtocol: InjectionProtocol) -> Double {
         return calculateLevel(at: date, for: injectionProtocol, using: profile.calibrationFactor)
     }
@@ -172,6 +214,72 @@ class AppDataStore: ObservableObject {
         
         recalcSimulation()
         saveProfile()
+    }
+    
+    func calibrateProtocolWithBayesian(_ protocolToCalibrate: InjectionProtocol) {
+        // Only proceed if protocol has blood samples and we can find matching compound
+        guard !protocolToCalibrate.bloodSamples.isEmpty,
+              let compound = compoundFromEster(protocolToCalibrate.ester) else {
+            // Fall back to simple calibration if needed
+            calibrateProtocol(protocolToCalibrate)
+            return
+        }
+        
+        // Convert blood samples to PKModel.SamplePoint format
+        let samplePoints = protocolToCalibrate.bloodSamples.map { 
+            PKModel.SamplePoint(timestamp: $0.date, labValue: $0.value)
+        }
+        
+        // Get injection dates for this protocol
+        let startDate = Calendar.current.date(
+            byAdding: .day,
+            value: -90, // Look back 90 days to catch buildup
+            to: protocolToCalibrate.bloodSamples.map { $0.date }.min() ?? Date()
+        ) ?? Date()
+        
+        let endDate = protocolToCalibrate.bloodSamples.map { $0.date }.max() ?? Date()
+        let injectionDates = protocolToCalibrate.injectionDates(from: startDate, upto: endDate)
+        
+        // Perform Bayesian calibration
+        if let calibrationResult = pkModel.bayesianCalibration(
+            samples: samplePoints,
+            injectionDates: injectionDates,
+            compound: compound,
+            dose: protocolToCalibrate.doseMg,
+            route: .intramuscular, // Default to IM for now
+            weight: profile.weight ?? 70.0
+        ) {
+            // For now, just use the calibration results to adjust the global calibration factor
+            // In a more advanced implementation, we could store the adjusted ke and ka per-compound
+            // or create a custom compound for this user
+            
+            // Update calibration factor based on average accuracy improvement
+            let avgLabValue = samplePoints.reduce(0.0) { $0 + $1.labValue } / Double(samplePoints.count)
+            let oldPredictions = samplePoints.map { point in
+                calculateLevel(at: point.timestamp, for: protocolToCalibrate, using: 1.0)
+            }
+            let avgOldPrediction = oldPredictions.reduce(0.0, +) / Double(oldPredictions.count)
+            
+            // Set calibration factor to make average prediction match average lab value
+            if avgOldPrediction > 0 {
+                profile.calibrationFactor = avgLabValue / avgOldPrediction
+            }
+            
+            // Print calibration results to console (would show in UI in full implementation)
+            print("Bayesian Calibration Results:")
+            print("Original half-life: \(compound.halfLifeDays) days")
+            print("Calibrated half-life: \(calibrationResult.halfLifeDays) days")
+            print("Half-life change: \(calibrationResult.halfLifeChangePercent, specifier: "%.1f")%")
+            print("Fit correlation: \(calibrationResult.correlation, specifier: "%.2f")")
+            print("Applied calibration factor: \(profile.calibrationFactor, specifier: "%.2f")")
+            
+            // Update simulation and save
+            recalcSimulation()
+            saveProfile()
+        } else {
+            // Fall back to simple calibration if Bayesian method fails
+            calibrateProtocol(protocolToCalibrate)
+        }
     }
     
     func formatValue(_ value: Double, unit: String) -> String {

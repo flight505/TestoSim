@@ -1,181 +1,129 @@
-**Planning TestoSim improvement**
+## Story 8 — Compound Library & Blends
 
-To improve the app, we'll add new testosterone esters, steroids, and fix some modeling accuracy. The goal is to include features like notifications, a cycle builder, AI insights, and a user profile. I'll need to gather current data on steroid half-lives, esters, and common anabolic steroids. I'll also research SwiftUI design ideas for charts, UX best practices, and guidelines for notifications and local storage. We need input from at least 15 reputable sources for a detailed part 2 of the implementation guide.
+*Data and utilities for single esters **and** multi-ester vials.*
 
-**Planning Part 2 Improvements**
+* [x] **Create `Compound.swift`** data model (see code block).
+* [x] **Create `VialBlend.swift`** to describe commercial mixtures (each `Component` maps to a `Compound`).
+* [x] **Populate `CompoundLibrary.swift`** with the literature half-lives below:
 
-For Part 2, I'll be adding new features like user profiles, notifications, cycle builders, and AI insights. I’ll organize this with sections: an overview of the improvements, additional pharmacokinetic data (new steroid esters and half-lives), modeling refinements (like multi-compartment models), and improved UI/UX designs (Lottie animations, SwiftUI charts). I'll need to gather sources for half-life values, modeling approaches, and SwiftUI guidelines. I'll also look up relevant search terms for testosterone esters, pharmacokinetics, and Apple documentation.
+  * [x] Testosterone propionate 0.8 d ([Wikipedia][1])
+  * [x] Testosterone phenylpropionate 2.5 d ([Iron Daddy][2])
+  * [x] Testosterone isocaproate 3.1 d ([Cayman Chemical][3])
+  * [x] Testosterone decanoate 7-14 d (use 10 d midpoint) ([BloomTechz][4])
+  * [x] Injectable testosterone undecanoate 18-24 d ([PubMed][5], [Wikipedia][6])
+  * [x] Oral testosterone undecanoate t½ 1.6 h, F = 0.07 ([Wikipedia][6])
+  * [x] Nandrolone decanoate 6-12 d ([Wikipedia][7])
+  * [x] Boldenone undecylenate ≈123 h ([ScienceDirect][8])
+  * [x] Trenbolone acetate 1-2 d ([ScienceDirect][9])
+  * [x] Trenbolone enanthate 11 d / hexahydrobenzylcarbonate 8 d ([Wikipedia][10])
+  * [x] Stanozolol IM suspension 24 h ([Wikipedia][11])
+  * [x] Drostanolone propionate 2 d ([Wikipedia][12])
+  * [x] Drostanolone enanthate ≈5 d ([Wikipedia][12])
+  * [x] Metenolone enanthate 10.5 d ([Wikipedia][13])
+  * [x] Trestolone (MENT) acetate t½ 40 min IV ≈ 2 h SC ([PubMed][14])
+  * [x] 1-Testosterone (DHB) cypionate ≈8 d (class analogue) ([Wikipedia][15])
+* [x] **Define `VialBlend` constants** for: Sustanon 250/350/400, Winstrol Susp 50, Masteron P 100 & E 200, Primobolan E 100, Tren Susp 50, Tren A 100, Tren E 200, Tren Hex 76, Tren Mix 150, Cut-Stack 150 & 250, MENT Ac 50, DHB Cyp 100 (per-mL mg in guide's table).
+* [x] **Library helpers**: `blends(containing:)`, `class(is:)`, `route(_:)`, and half-life range filters.
 
-**Gathering reliable sources**
-
-I need to collect at least 15 sources from a mix of reputable domains: PubMed, NCBI Books, FDA documents, and other trusted resources. I could also look at academic journals and bodybuilding websites, but it's important to focus on credible ones for accuracy. I'll search for the relevant information by running queries to gather these sources. After that, I'll be sure to cite everything clearly, so I have strong references for the implementation guide.
-
-
-**Gathering more sources**
-
-I’ll need to gather at least 15 reliable sources from a variety of domains like PubMed, academic journals, and official documents like FDA guidelines and Apple Developer docs. I’ll also need some sources for Lottie animations in SwiftUI, so I’m thinking of checking out GitHub and other design guidelines. To find these resources, I’ll search for terms like "Lottie SwiftUI animation guide" to ensure I get the most current and relevant information.
-
-
-**Structuring Part 2 Stories**
-
-I now have several sources gathered, so it’s time to reference them properly in my answer. The next step is crafting Part 2 of the Implementation Guide in checklist format, with newly added data models like additional esters and steroids. I’ll continue from the existing Stories 1-7 and create new stories numbered 8-14. I'll focus on integrating these stories incrementally as we move from polishing and testing to implementing these new features. This structure will allow us to add more detail and maintain clear progression.
-
-**Structuring Part 2 Task List**
-
-I need to organize tasks for parts of Story 8 through Story 15. For example, Story 8 involves expanding data with additional esters and steroids, while Story 9 focuses on refining pharmacokinetic models. Story 10 will add multiple administration routes, and Stories 11 and 12 prioritize user profile improvements and scheduling features. Story 13 tackles cycle building with AI insights, and Story 14 is about UI/UX enhancements. Story 15 is for final testing. I'll include proper headers and a summary paragraph as the guide specifies, along with citations throughout the document.
-
-
-Thought for 55 seconds
-
-
-Below is **Part 2 IMPLEMENTATION GUIDE.md** — a continuation of the original checklist that adds richer data, more accurate PK math, new user-facing features (cycle builder, reminders, AI insights), and polish for an “App Store-ready” SwiftUI experience.
-It introduces **Stories 8 - 14**; each task is an unchecked checkbox `[ ]` you can drop straight into Xcode tickets.
-
----
-
-## Story 8 – Expand the Compound Library
-
-*Data models for many esters & popular AAS, ready for simulation and cycle-planning.*
-
-* [ ] **Create `Compound.swift` in *Models***
-
-  ```swift
-  struct Compound: Identifiable, Codable, Hashable {
-      enum Class : String, Codable { case testosterone, nandrolone, trenbolone, boldenone /*…*/ }
-      enum Route : String, Codable { case intramuscular, subcutaneous, oral, transdermal }
-      let id: UUID
-      var commonName: String
-      var classType: Class
-      var ester: String?        // e.g. "Phenylpropionate"
-      var halfLifeDays: Double  // default literature t½
-      var defaultBioavailability: Double // 1.0 IM/SC, 0.05 oral TU etc.
-      var defaultAbsorptionRateKa: Double //  day-¹  (see Story 9)
-  }
-  ```
-
-* [ ] **Populate `CompoundLibrary.swift`** with static constants & an `all` array.
-  Use the half-lives below as defaults (users/calibration may override):
-
-  | Compound                          | Ester   | t½ (days) | Sources |
-  | --------------------------------- | ------- | --------- | ------- |
-  | **Testosterone Acetate**          | Acetate | ≈1.0      |         |
-  | **Testosterone Phenylpropionate** | PP      | ≈4.5      |         |
-  | **Testosterone Isocaproate**      | IC      | ≈9        |         |
-  | **Testosterone Decanoate**        | Dec     | ≈15       |         |
-  | **Nandrolone Decanoate**          | Dec     | 6-12      |         |
-  | **Trenbolone Acetate**            | Ac      | 1-2       |         |
-  | **Trenbolone Enanthate**          | E       | ≈11       |         |
-  | **Boldenone Undecylenate**        | U       | ≈14       |         |
-
-* [ ] **Migrate existing `TestosteroneEster` uses to `Compound`**
-
-  * InjectionProtocol now stores `compound: Compound` instead of `ester`.
-
-* [ ] **Add search & filter utilities** (e.g., `CompoundLibrary.class(_:)`, route filters).
+```swift
+struct Compound: Identifiable, Codable, Hashable {
+    enum Class: String, Codable { case testosterone, nandrolone, trenbolone,
+                                   boldenone, drostanolone, stanozolol, metenolone,
+                                   trestolone, dhb }
+    enum Route: String, Codable { case intramuscular, subcutaneous, oral, transdermal }
+    let id: UUID
+    var commonName: String
+    var classType: Class
+    var ester: String?          // nil for suspensions
+    var halfLifeDays: Double
+    var defaultBioavailability: [Route: Double]
+    var defaultAbsorptionRateKa: [Route: Double] // d-¹
+}
+```
 
 ---
 
-## Story 9 – Refined PK Engine
+## Story 9 — Refined PK Engine
 
-*One-compartment with first-order absorption + elimination, optional dual-phase.*
+*Accurate curves for any route, any blend.*
 
-* [ ] **Create `PKModel.swift`** with:
+* [x] **Implement `PKModel.concentration`**
 
-  ```swift
-  struct PKModel {
-      static func concentration(
-          doseMg: Double,
-          tSinceDoseDays t: Double,
-          ka: Double,
-          ke: Double,
-          bio: Double = 1.0,
-          Vd_L_per_kg: Double = 1.0,
-          bodyWeightKg: Double = 80.0
-      ) -> Double {
-          guard t >= 0 else { return 0 }
-          let F = bio
-          let Vd = Vd_L_per_kg * bodyWeightKg
-          return (F * doseMg * ka / (Vd * (ka - ke))) * (exp(-ke*t) - exp(-ka*t))
-      }
-  }
-  ```
+  $$
+  C(t)=\frac{F\,D\,k_a}{V_d\,(k_a-k_e)}\bigl(e^{-k_e t}-e^{-k_a t}\bigr)
+  $$
 
-  *Defaults stem from adult male IM/SC TE models* .
+  where $k_e=\ln2/t_{1/2}$.\* Units = days\* ([UF College of Pharmacy][16])
 
-* [ ] **Extend `calculateLevel`**
+* [x] **Optional two-compartment flag**; derive α, β from $k_{12}=0.3$, $k_{21}=0.15$ d⁻¹ ([UF College of Pharmacy][16])
 
-  * For each previous injection, sum `PKModel.concentration(...)`.
-  * Pull `ka`, `ke`, and `bio` from the `Compound` defaults; allow protocol-level overrides.
+* [x] **Allometric scaling**:
+  $V_{d,\text{user}} = V_{d,70}(WT/70)^{1.0}$;
+  $CL_{\text{user}} = CL_{70}(WT/70)^{0.75}$ ([PubMed][17])
 
-* [ ] **Add oral & transdermal handling** (e.g., oral TU t½ 2.5 h, F≈0.05) .
+* [x] **Route parameters** (defaults in `CompoundLibrary`):
 
-* [ ] **Introduce Bayesian calibration placeholder** – multiple blood samples → update ka & ke (future work).
+  | Ester               | k<sub>a</sub> (d⁻¹ IM) | Oral F | Notes                               |
+  | ------------------- | ---------------------- | ------ | ----------------------------------- |
+  | Propionate          | 0.70                   | —      | inj q2-3 d advised ([Wikipedia][1]) |
+  | Phenylpropionate    | 0.50                   | —      | —                                   |
+  | Isocaproate         | 0.35                   | —      | —                                   |
+  | Decanoate           | 0.18                   | —      | —                                   |
+  | Hex-carb            | 0.20                   | —      | —                                   |
+  | Acetate (Tren/Test) | 1.00                   | —      | very fast                           |
+  | Stanozolol susp     | 1.50                   | —      | 24 h t½ ([Wikipedia][11])           |
+  | Oral TU             | —                      | 0.07   | t½ 1.6 h ([Wikipedia][6])           |
+  | MENT Ac             | 2.00                   | —      | 40 min IV t½ ([PubMed][14])         |
 
----
+* [x] **Blend handling**: loop through each `Component` and sum concentrations.
 
-## Story 10 – User Profile 2.0 & Persistence
-
-*Demographics, BSA, and optional iCloud sync.*
-
-* [ ] **Augment `UserProfile`**
-
-  ```swift
-  var dateOfBirth: Date?
-  var heightCm: Double?
-  var weightKg: Double?
-  var biologicalSex: String? // “male”, “female”, “other”
-  var usesICloudSync: Bool = false
-  ```
-
-  *Computed var `bodySurfaceArea` using DuBois.*
-
-* [ ] **Switch persistence to CoreData + CloudKit** *(opt-in)*.
-
-  * Model: `UserProfileEntity`, `InjectionProtocolEntity`, `CompoundEntity`.
-  * Use Apple’s `new CoreData + CloudKit` template; migrate from UserDefaults.
-
-
-* [ ] **Add migration helper** that copies old JSON into CoreData on first launch.
+* [x] **Bayesian calibration stub** – accept `[TimeStamp:LabT]` to refine $k_e,k_a$.
 
 ---
 
-## Story 11 – Notifications & Adherence
+## Story 10 — User Profile 2.0 & Persistence
 
-*Remind users when injections or orals are due.*
+*Personalisation + seamless cloud backup.*
 
-* [ ] **Request permission** with `UNUserNotificationCenter.current().requestAuthorization`.
-
-* [ ] **Schedule repeating notifications** when a protocol is created/edited:
-
-  ```swift
-  var content = UNMutableNotificationContent()
-  content.title = "Injection due"
-  content.body  = "\(protocol.name) today (\(dose) mg)"
-  let trigger = UNTimeIntervalNotificationTrigger(timeInterval: nextDoseSeconds, repeats:false)
-  ```
-
-
-
-* [ ] **Handle rescheduling** after user logs an injection.
+* [x] Extend `UserProfile` with DOB, height cm, weight kg, biologicalSex, `usesICloudSync`; compute `bodySurfaceArea` (DuBois).
+* [ ] Migrate storage to **Core Data + CloudKit** with `NSPersistentCloudKitContainer` ([Apple Developer][18])
+* [ ] Write one-time JSON-to-CoreData migrator flag `UserDefaults.migrated = true`.
 
 ---
 
-## Story 12 – Cycle Builder
+## Story 11 — Notifications & Adherence
 
-*A timeline composer for multi-compound performance cycles.*
+*Keep users on-schedule.*
 
-* [ ] **Create `Cycle.swift` (Models)** with `name`, `startDate`, `weeks`, `stages:[CycleStage]`.
-
-* [ ] **Each `CycleStage`** references one `InjectionProtocol` and relative start-week.
-
-* [ ] **UI – `CyclePlannerView`**
-
-  * Horizontal `ScrollView` of weeks; drag-&-drop compounds.
-  * Use Swift Charts Gantt-like bars plus compound icons.
-
-* [ ] **Tap “Simulate Cycle”** → merges stages into temporary protocols → re-uses PK engine.
+* [ ] Request permission via `UNUserNotificationCenter.requestAuthorization` ([Apple Developer][19])
+* [ ] After each protocol edit, schedule next-dose alert with `UNCalendarNotificationTrigger`.
+* [ ] Add settings: lead-time (1 h / 6 h / 12 h) and sound toggle.
 
 ---
+
+## Story 12 — Cycle Builder
+
+*Visual timeline for multi-compound plans.*
+
+* [ ] `Cycle` model (name, startDate, totalWeeks, stages:\[CycleStage]).
+* [ ] SwiftUI `CyclePlannerView`: horizontal weeks, drag-and-drop `VialBlend` cards; render Gantt bars with **Swift Charts** scroll-zoom & selection APIs ([Apple Developer][20])
+* [ ] "Simulate Cycle" merges stages to temp protocols → feeds PK engine.
+
+---
+
+## Story 13 — AI Insights
+
+*Contextual coaching.*
+
+* [ ] `InsightsGenerator` – send `{profile, simulation}` to LLM; receive JSON {peaks, troughs, tips}.
+* [ ] Add helper `BlendExplainer` for plain-English breakdown of multi-ester vials (e.g. "Sustanon 400 = 4 esters; expect early spike then 3-week tail"). 
+* [ ] **Add `InsightsGenerator` service** – pass latest simulation & profile; receive JSON with:
+
+  * Predicted peaks/troughs.
+  * Adherence tips (e.g., "consider splitting weekly 200 mg TE into 2×100 mg").
+* [ ] **Prototype with `openAI`** model O4 (research model and api)
+
+
 
 ## Story 13 – AI Insights
 
@@ -184,10 +132,39 @@ It introduces **Stories 8 - 14**; each task is an unchecked checkbox `[ ]` you c
 * [ ] **Add `InsightsGenerator` service** – pass latest simulation & profile; receive JSON with:
 
   * Predicted peaks/troughs.
-  * Adherence tips (e.g., “consider splitting weekly 200 mg TE into 2×100 mg”).
+  * Adherence tips (e.g., "consider splitting weekly 200 mg TE into 2×100 mg").
 * [ ] **Prototype with `openAI` or Core ML-powered model (if offline required).**
 
 ---
+
+## Story 14 — UI/UX Polish & Animations
+
+*Delightful & accessible.*
+
+* [ ] Follow **Apple HIG "Charting Data"** for uncluttered axes & call-outs ([Apple Developer][21])
+* [ ] Dashboard card shows *current level* + *days until next dose*; layout guided by NN/g pre-attentive dashboard rules ([Nielsen Norman Group][22])
+* [ ] Add `.animation(.easeInOut, value:data)` to curve reveal.
+* [ ] Integrate **Lottie** via SPM `airbnb/lottie-spm` 4.5 + ([GitHub][23])
+* [ ] Provide haptics (`UIImpactFeedbackGenerator`) and system sounds on log-dose success.
+* [ ] Define semantic color assets for light/dark compliance.
+* [ ] **Add `InsightsGenerator` service** – pass latest simulation & profile; receive JSON with:
+
+  * Predicted peaks/troughs.
+  * Adherence tips (e.g., "consider splitting weekly 200 mg TE into 2×100 mg").
+* [ ] **Prototype with `openAI` model O4.**
+---
+
+
+## Story 15 — Testing & Validation
+
+| Test     | Target                                                                                                             | Pass criteria            |
+| -------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------ |
+| **Unit** | 250 mg Test E single IM → C<sub>max</sub> ≈ 1540 ng/dL @ 72 h; 50 % peak by day 9 ([World Anti Doping Agency][24]) | Δ ≤ 10 %                 |
+|          | 100 mg Tren A Q2D × 14 d steady-state \~6× baseline ([Wikipedia][10])                                              | Δ ≤ 10 %                 |
+| **UI**   | Notification permission flow, drag-drop in cycle builder                                                           | No crash, state persists |
+| **Perf** | Simulate 5-compound 20-week plan on iPhone 12                                                                      | < 50 ms average          |
+
+
 
 ## Story 14 – UI/UX Polish & Animations
 
@@ -201,31 +178,64 @@ It introduces **Stories 8 - 14**; each task is an unchecked checkbox `[ ]` you c
 * [ ] **Haptics & sounds** when user records an injection.
 * [ ] **Dark-mode friendly color palette** using semantic `Color` assets.
 
----
-
-## Story 15 – Extended Testing & Validation
-
-* [ ] **Unit-test PKModel** against literature Cmax/Ctrough values for TE, TPP, ND.
-* [ ] **UI tests** – notification permission flow, cycle builder drag-drop.
-* [ ] **Performance tests** – simulate 5-compound 20-week cycle under 50 ms.
 
 ---
 
-### References (ordered by appearance)
+## References
 
-1. SC vs IM testosterone PK one-compartment model&#x20;
-2. Half-life data for common Sustanon esters&#x20;
-3. Nandrolone decanoate elimination profile&#x20;
-4. Trenbolone acetate half-life 1-2 days&#x20;
-5. Trenbolone enanthate ≈ 11 days&#x20;
-6. Boldenone undecylenate PK overview&#x20;
-7. Phenylpropionate & isocaproate detectability (WADA)&#x20;
-8. Oral TU short half-life 150 min&#x20;
-9. Local notification scheduling guide&#x20;
-10. Swift Charts documentation (animations, interactions)&#x20;
-11. CoreData + CloudKit integration tutorial&#x20;
-12. Lottie-iOS library ([github.com][1])
+1. Testosterone propionate half-life 0.8 d ([Wikipedia][1])
+2. Testosterone PP half-life 2.5 d ([Iron Daddy][2])
+3. Testosterone isocaproate info ([Cayman Chemical][3])
+4. Testosterone decanoate 7–14 d ([BloomTechz][4])
+5. TU depot half-life 18–24 d ([PubMed][5])
+6. Oral TU bioavailability 0.07, t½ 1.6 h ([Wikipedia][6])
+7. Nandrolone decanoate 6–12 d ([Wikipedia][7])
+8. Boldenone undecylenate \~123 h ([ScienceDirect][8])
+9. Trenbolone acetate 1-2 d ([ScienceDirect][9])
+10. Trenbolone hex/enanthate data ([Wikipedia][10])
+11. Stanozolol suspension 24 h ([Wikipedia][11])
+12. Drostanolone propionate 2 d; enanthate \~5 d ([Wikipedia][12])
+13. Metenolone enanthate 10.5 d ([Wikipedia][13])
+14. Trestolone acetate 40 min IV t½ ([PubMed][14])
+15. DHB overview (1-Testosterone) ([Wikipedia][15])
+16. Allometric scaling study (TE) ([PubMed][17])
+17. UF "Useful PK equations" sheet ([UF College of Pharmacy][16])
+18. Apple CoreData + CloudKit doc ([Apple Developer][18])
+19. Apple Charting-Data HIG ([Apple Developer][21])
+20. WWDC23 Swift Charts interactivity ([Apple Developer][20])
+21. UNUserNotificationCenter API page ([Apple Developer][19])
+22. Lottie-SPM install guide ([GitHub][23])
+23. NN/g dashboard pre-attentive article ([Nielsen Norman Group][22])
+24. WADA blood detection of testosterone esters ([World Anti Doping Agency][24])
 
-Feel free to adjust t½ defaults or add more compounds; the checklist above slots seamlessly after Story 7 of your original plan and equips TestoSim with the breadth, brains, and beauty to wow first-wave users while leaving room for future cloud sync and AI calibration.
+---
+
+*Everything from models and math to UX, AI, and QA is now in one place—ready for your code assistant to execute.*
+
+[1]: https://en.wikipedia.org/wiki/Testosterone_propionate?utm_source=chatgpt.com "Testosterone propionate - Wikipedia"
+[2]: https://iron-daddy.to/product-category/injectable-steroids/testosterone-phenylpropionate/?utm_source=chatgpt.com "Testosterone Phenylpropionate Half Life - Iron-Daddy.to"
+[3]: https://www.caymanchem.com/product/22547/testosterone-isocaproate?srsltid=AfmBOoqMzkbumL-PTe0EBkhjjakJVRLR66OsRIFjNbNDIX5YwYpMLPer&utm_source=chatgpt.com "Testosterone Isocaproate (CAS 15262-86-9) - Cayman Chemical"
+[4]: https://www.bloomtechz.com/info/what-is-the-half-life-of-testosterone-decanoat-93380289.html?utm_source=chatgpt.com "What Is The Half Life Of Testosterone Decanoate? - BLOOM TECH"
+[5]: https://pubmed.ncbi.nlm.nih.gov/9876028/?utm_source=chatgpt.com "A pharmacokinetic study of injectable testosterone undecanoate in ..."
+[6]: https://en.wikipedia.org/wiki/Testosterone_undecanoate?utm_source=chatgpt.com "Testosterone undecanoate - Wikipedia"
+[7]: https://en.wikipedia.org/wiki/Nandrolone_decanoate?utm_source=chatgpt.com "Nandrolone decanoate - Wikipedia"
+[8]: https://www.sciencedirect.com/science/article/abs/pii/S1567576921005750?utm_source=chatgpt.com "Boldenone undecylenate disrupts the immune system and induces ..."
+[9]: https://www.sciencedirect.com/science/article/abs/pii/S002228602030452X?utm_source=chatgpt.com "Structural studies of Trenbolone, Trenbolone Acetate ..."
+[10]: https://en.wikipedia.org/wiki/Trenbolone?utm_source=chatgpt.com "Trenbolone"
+[11]: https://en.wikipedia.org/wiki/Stanozolol?utm_source=chatgpt.com "Stanozolol - Wikipedia"
+[12]: https://en.wikipedia.org/wiki/Drostanolone_propionate?utm_source=chatgpt.com "Drostanolone propionate - Wikipedia"
+[13]: https://en.wikipedia.org/wiki/Metenolone_enanthate?utm_source=chatgpt.com "Metenolone enanthate - Wikipedia"
+[14]: https://pubmed.ncbi.nlm.nih.gov/9283946/?utm_source=chatgpt.com "Pharmacokinetics of 7 alpha-methyl-19-nortestosterone in men and ..."
+[15]: https://en.wikipedia.org/wiki/1-Testosterone?utm_source=chatgpt.com "1-Testosterone - Wikipedia"
+[16]: https://pharmacy.ufl.edu/files/2013/01/5127-28-equations.pdf?utm_source=chatgpt.com "[PDF] Useful Pharmacokinetic Equations"
+[17]: https://pubmed.ncbi.nlm.nih.gov/37180212/?utm_source=chatgpt.com "Allometric Scaling of Testosterone Enanthate Pharmacokinetics to ..."
+[18]: https://developer.apple.com/documentation/coredata/setting-up-core-data-with-cloudkit "Setting Up Core Data with CloudKit | Apple Developer Documentation"
+[19]: https://developer.apple.com/documentation/usernotifications/unusernotificationcenter/requestauthorization "Failed"
+[20]: https://developer.apple.com/videos/play/wwdc2023/10037 "Explore pie charts and interactivity in Swift Charts - WWDC23 - Videos - Apple Developer"
+[21]: https://developer.apple.com/design/human-interface-guidelines/charting-data "Charting data | Apple Developer Documentation"
+[22]: https://www.nngroup.com/articles/dashboards-preattentive/?utm_source=chatgpt.com "Dashboards: Making Charts and Graphs Easier to Understand - NN/g"
+[23]: https://github.com/airbnb/lottie-spm?utm_source=chatgpt.com "airbnb/lottie-spm: Swift Package Manager support for Lottie ... - GitHub"
+[24]: https://www.wada-ama.org/en/resources/scientific-research/detection-testosterone-esters-blood-sample?utm_source=chatgpt.com "Detection of testosterone esters in blood sample - WADA"
+
 
 [1]: https://github.com/airbnb/lottie-ios "airbnb/lottie-ios: An iOS library to natively render After Effects vector ..."
