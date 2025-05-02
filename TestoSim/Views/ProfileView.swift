@@ -17,7 +17,7 @@ struct ProfileView: View {
             }
             
             Section("Calibration") {
-                Text("Model Calibration Factor: \(dataStore.profile.calibrationFactor, specifier: "%.2f")")
+                Text("Model Calibration Factor: \(dataStore.profile.calibrationFactor.formatted(.number.precision(.fractionLength(2))))")
                 Button("Reset Calibration to 1.0") {
                     dataStore.profile.calibrationFactor = 1.0
                     dataStore.recalcSimulation()

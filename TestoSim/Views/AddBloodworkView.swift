@@ -31,7 +31,7 @@ struct AddBloodworkView: View {
                         VStack(spacing: 4) {
                             Text("Protocol: \(injectionProtocol.name)")
                                 .font(.subheadline)
-                            Text("\(injectionProtocol.doseMg, specifier: "%.0f") mg \(injectionProtocol.ester.name) every \(injectionProtocol.frequencyDays, specifier: "%.1f") days")
+                            Text("\(injectionProtocol.doseMg, format: .number.precision(.fractionLength(0))) mg \(injectionProtocol.ester.name) every \(injectionProtocol.frequencyDays, format: .number.precision(.fractionLength(1))) days")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                         }

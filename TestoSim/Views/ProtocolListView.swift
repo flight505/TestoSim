@@ -14,7 +14,7 @@ struct ProtocolListView: View {
                         VStack(alignment: .leading) {
                             Text(injectionProtocol.name)
                                 .font(.headline)
-                            Text("\(injectionProtocol.doseMg, specifier: "%.0f") mg \(injectionProtocol.ester.name) every \(injectionProtocol.frequencyDays, specifier: "%.1f") days")
+                            Text("\(injectionProtocol.doseMg, format: .number.precision(.fractionLength(0))) mg \(injectionProtocol.ester.name) every \(injectionProtocol.frequencyDays, format: .number.precision(.fractionLength(1))) days")
                                 .font(.subheadline)
                                 .foregroundColor(.secondary)
                         }
@@ -25,7 +25,7 @@ struct ProtocolListView: View {
         }
         .navigationTitle("Protocols")
         .toolbar {
-            ToolbarItem(placement: .navigationBarLeading) {
+            ToolbarItem(placement: .automatic) {
                 NavigationLink(destination: ProfileView()) {
                     Label("Profile", systemImage: "person.circle")
                 }

@@ -269,9 +269,18 @@ class AppDataStore: ObservableObject {
             print("Bayesian Calibration Results:")
             print("Original half-life: \(compound.halfLifeDays) days")
             print("Calibrated half-life: \(calibrationResult.halfLifeDays) days")
-            print("Half-life change: \(calibrationResult.halfLifeChangePercent, specifier: "%.1f")%")
-            print("Fit correlation: \(calibrationResult.correlation, specifier: "%.2f")")
-            print("Applied calibration factor: \(profile.calibrationFactor, specifier: "%.2f")")
+            
+            let percentFormatter = NumberFormatter()
+            percentFormatter.maximumFractionDigits = 1
+            let halfLifeChangeStr = percentFormatter.string(from: NSNumber(value: calibrationResult.halfLifeChangePercent)) ?? "\(calibrationResult.halfLifeChangePercent)"
+            print("Half-life change: \(halfLifeChangeStr)%")
+            
+            let decimalFormatter = NumberFormatter()
+            decimalFormatter.maximumFractionDigits = 2
+            let correlationStr = decimalFormatter.string(from: NSNumber(value: calibrationResult.correlation)) ?? "\(calibrationResult.correlation)"
+            let calFactorStr = decimalFormatter.string(from: NSNumber(value: profile.calibrationFactor)) ?? "\(profile.calibrationFactor)"
+            print("Fit correlation: \(correlationStr)")
+            print("Applied calibration factor: \(calFactorStr)")
             
             // Update simulation and save
             recalcSimulation()

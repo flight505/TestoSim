@@ -51,7 +51,13 @@ struct VialBlend: Identifiable, Codable, Hashable {
             return "Unknown composition"
         }
         
-        let parts = resolved.map { "\($0.compound.fullDisplayName) \($0.mgPerML, specifier: "%.0f")mg/mL" }
-        return parts.joined(separator: ", ")
+        // Completely rewritten to avoid any string interpolation complexity
+        let descriptions = resolved.map { component -> String in
+            let name = component.compound.fullDisplayName
+            let dosage = Int(component.mgPerML)
+            return name + " " + String(dosage) + "mg/mL"
+        }
+        
+        return descriptions.joined(separator: ", ")
     }
 } 

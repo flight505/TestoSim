@@ -12,11 +12,11 @@ struct ProtocolDetailView: View {
             VStack(alignment: .leading, spacing: 16) {
                 // Protocol summary
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Dose: \(injectionProtocol.doseMg, specifier: "%.0f") mg")
+                    Text("Dose: \(injectionProtocol.doseMg, format: .number.precision(.fractionLength(0))) mg")
                         .font(.headline)
                     Text("Ester: \(injectionProtocol.ester.name)")
                         .font(.headline)
-                    Text("Frequency: Every \(injectionProtocol.frequencyDays, specifier: "%.1f") days")
+                    Text("Frequency: Every \(injectionProtocol.frequencyDays, format: .number.precision(.fractionLength(1))) days")
                         .font(.headline)
                     Text("Started: \(formatDate(injectionProtocol.startDate))")
                         .font(.headline)
@@ -81,7 +81,9 @@ struct ProtocolDetailView: View {
             .padding()
         }
         .navigationTitle(injectionProtocol.name)
+        #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
+        #endif
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button("Edit") {
