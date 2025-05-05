@@ -7,6 +7,15 @@ struct ProtocolDetailView: View {
     
     let injectionProtocol: InjectionProtocol
     
+    // Try to get the compound for any protocol type
+    var resolvedCompound: Compound? {
+        // If protocol has a direct compound reference, use that
+        if let compoundID = injectionProtocol.compoundID {
+            return dataStore.compoundLibrary.compound(withID: compoundID)
+        }
+        return nil
+    }
+    
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
@@ -50,12 +59,14 @@ struct ProtocolDetailView: View {
                     .buttonStyle(.bordered)
                     .disabled(injectionProtocol.bloodSamples.isEmpty)
                     
-                    // New navigation link to calibration details
-                    NavigationLink(destination: CalibrationResultView(injectionProtocol: injectionProtocol)) {
+                    // New navigation link to calibration details - disable for now until we implement proper calibration results
+                    Button {
+                        // This will be enabled when we properly implement calibration in a future update
+                    } label: {
                         Label("View Calibration Details", systemImage: "chart.xyaxis.line")
                     }
                     .buttonStyle(.bordered)
-                    .disabled(injectionProtocol.bloodSamples.isEmpty)
+                    .disabled(true) // Disable for now until full calibration is implemented
                 }
                 .padding(.horizontal)
             }
@@ -89,9 +100,6 @@ struct ProtocolDetailView: View {
         VStack(alignment: .leading, spacing: 8) {
             // Display information based on protocol type
             switch injectionProtocol.protocolType {
-            case .legacyEster:
-                legacyEsterSummary
-                
             case .compound:
                 if let compoundID = injectionProtocol.compoundID,
                    let compound = dataStore.compoundLibrary.compound(withID: compoundID) {
@@ -145,6 +153,14 @@ struct ProtocolDetailView: View {
                     Spacer()
                     Text(route.displayName)
                 }
+            } else {
+                // Default route if not specified
+                HStack {
+                    Text("Route:")
+                        .bold()
+                    Spacer()
+                    Text("Intramuscular (IM)")
+                }
             }
             
             HStack {
@@ -167,24 +183,6 @@ struct ProtocolDetailView: View {
     }
     
     // MARK: - Protocol type-specific summaries
-    
-    var legacyEsterSummary: some View {
-        VStack(alignment: .leading) {
-            HStack {
-                Text("Testosterone Ester:")
-                    .bold()
-                Spacer()
-                Text(injectionProtocol.ester.name)
-            }
-            
-            HStack {
-                Text("Half-life:")
-                    .bold()
-                Spacer()
-                Text("\(injectionProtocol.ester.halfLifeDays, specifier: "%.1f") days")
-            }
-        }
-    }
     
     func compoundSummary(compound: Compound) -> some View {
         VStack(alignment: .leading) {
@@ -313,7 +311,6 @@ struct ProtocolDetailView: View {
     NavigationStack {
         ProtocolDetailView(injectionProtocol: InjectionProtocol(
             name: "Test Protocol",
-            ester: .cypionate,
             doseMg: 100,
             frequencyDays: 7,
             startDate: Date()

@@ -8,14 +8,13 @@ struct ProtocolFormView: View {
     
     // MARK: - State variables
     @State private var name: String = ""
-    @State private var selectedEster: TestosteroneEster = .cypionate
     @State private var doseMg: String = ""
     @State private var frequencyDays: String = ""
     @State private var startDate: Date = Date()
     @State private var notes: String = ""
     
-    // New state variables for enhanced protocol form
-    @State private var protocolType: ProtocolType = .legacyEster
+    // Protocol type and selection variables
+    @State private var protocolType: ProtocolType = .compound
     @State private var selectedCompoundID: UUID?
     @State private var selectedBlendID: UUID?
     @State private var selectedRoute: Compound.Route = .intramuscular
@@ -52,16 +51,12 @@ struct ProtocolFormView: View {
                     
                     // Protocol Type Selector
                     Picker("Type", selection: $protocolType) {
-                        Text("Testosterone Ester").tag(ProtocolType.legacyEster)
                         Text("Compound").tag(ProtocolType.compound)
                         Text("Blend").tag(ProtocolType.blend)
                     }
                     .pickerStyle(SegmentedPickerStyle())
                     .onChange(of: protocolType) { _ in
                         // Reset selection when changing type
-                        if protocolType != .legacyEster {
-                            selectedEster = .cypionate
-                        }
                         if protocolType != .compound {
                             selectedCompoundID = nil
                         }
@@ -72,13 +67,6 @@ struct ProtocolFormView: View {
                     
                     // Dynamically show the appropriate selection UI based on protocol type
                     switch protocolType {
-                    case .legacyEster:
-                        Picker("Testosterone Ester", selection: $selectedEster) {
-                            ForEach(TestosteroneEster.all) { ester in
-                                Text(ester.name).tag(ester)
-                            }
-                        }
-                        
                     case .compound:
                         Button(action: {
                             showingCompoundPicker = true
@@ -187,8 +175,6 @@ struct ProtocolFormView: View {
                     
                     // Determine which protocol type we're editing
                     protocolType = protocolToEdit.protocolType
-                    
-                    selectedEster = protocolToEdit.ester
                     selectedCompoundID = protocolToEdit.compoundID
                     selectedBlendID = protocolToEdit.blendID
                     
@@ -225,8 +211,6 @@ struct ProtocolFormView: View {
         
         // Type-specific validation
         switch protocolType {
-        case .legacyEster:
-            return true // Always valid if using predefined ester
         case .compound:
             return selectedCompoundID != nil
         case .blend:
@@ -250,22 +234,12 @@ struct ProtocolFormView: View {
             
             // Update the protocol type-specific properties
             switch protocolType {
-            case .legacyEster:
-                updatedProtocol.ester = selectedEster
-                updatedProtocol.compoundID = nil
-                updatedProtocol.blendID = nil
-                updatedProtocol.selectedRoute = nil
-                
             case .compound:
-                // Keep ester for backward compatibility
-                updatedProtocol.ester = selectedEster
                 updatedProtocol.compoundID = selectedCompoundID
                 updatedProtocol.blendID = nil
                 updatedProtocol.selectedRoute = selectedRoute.rawValue
                 
             case .blend:
-                // Keep ester for backward compatibility
-                updatedProtocol.ester = selectedEster
                 updatedProtocol.compoundID = nil
                 updatedProtocol.blendID = selectedBlendID
                 updatedProtocol.selectedRoute = selectedRoute.rawValue
@@ -275,7 +249,6 @@ struct ProtocolFormView: View {
         } else {
             var newProtocol = InjectionProtocol(
                 name: name,
-                ester: selectedEster,
                 doseMg: doseValue,
                 frequencyDays: frequencyValue,
                 startDate: startDate,
@@ -284,10 +257,6 @@ struct ProtocolFormView: View {
             
             // Set the protocol type-specific properties
             switch protocolType {
-            case .legacyEster:
-                // Already set with initializer
-                break
-                
             case .compound:
                 newProtocol.compoundID = selectedCompoundID
                 newProtocol.selectedRoute = selectedRoute.rawValue

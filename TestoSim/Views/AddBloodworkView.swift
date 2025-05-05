@@ -4,89 +4,98 @@ struct AddBloodworkView: View {
     @EnvironmentObject var dataStore: AppDataStore
     @Environment(\.dismiss) var dismiss
     
-    let injectionProtocol: InjectionProtocol
+    var injectionProtocol: InjectionProtocol
     
-    @State private var date: Date = Date()
-    @State private var valueText: String = ""
-    @State private var selectedUnit: String = "ng/dL"
+    @State private var bloodValue: String = ""
+    @State private var bloodDate: Date = Date()
+    @State private var notes: String = ""
+    
+    @State private var showingAlert = false
+    @State private var alertMessage = ""
     
     var body: some View {
-        NavigationView {
+        NavigationStack {
             Form {
-                Section(header: Text("Blood Test Details")) {
-                    DatePicker("Date", selection: $date, in: injectionProtocol.startDate..., displayedComponents: [.date, .hourAndMinute])
+                Section("Sample Details") {
+                    TextField("Blood Level Value (\(dataStore.profile.unit))", text: $bloodValue)
+                        .keyboardType(.numbersAndPunctuation)
                     
-                    #if os(iOS)
-                    TextField("Testosterone Level", text: $valueText)
-                        .keyboardType(.decimalPad)
-                    #else
-                    TextField("Testosterone Level", text: $valueText)
-                    #endif
-                    
-                    Picker("Unit", selection: $selectedUnit) {
-                        Text("ng/dL").tag("ng/dL")
-                        Text("nmol/L").tag("nmol/L")
-                    }
+                    DatePicker("Sample Date", selection: $bloodDate, displayedComponents: [.date, .hourAndMinute])
                 }
                 
-                Section {
-                    HStack {
-                        Spacer()
-                        VStack(spacing: 4) {
-                            Text("Protocol: \(injectionProtocol.name)")
-                                .font(.subheadline)
-                            Text("\(injectionProtocol.doseMg, format: .number.precision(.fractionLength(0))) mg \(injectionProtocol.ester.name) every \(injectionProtocol.frequencyDays, format: .number.precision(.fractionLength(1))) days")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                        Spacer()
+                Section("Notes") {
+                    TextEditor(text: $notes)
+                        .frame(minHeight: 100)
+                }
+                
+                Section("Actions") {
+                    Button("Add Sample and Calibrate") {
+                        saveBloodwork(andCalibrate: true)
                     }
-                    .padding(.vertical, 4)
+                    .frame(maxWidth: .infinity)
+                    .foregroundColor(.white)
+                    .padding()
+                    .background(Color.blue)
+                    .cornerRadius(10)
+                    
+                    Button("Add Sample Only") {
+                        saveBloodwork(andCalibrate: false)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .foregroundColor(.white)
+                    .padding()
+                    .background(Color.green)
+                    .cornerRadius(10)
                 }
             }
-            .navigationTitle("Add Blood Test Result")
+            .navigationTitle("Add Blood Sample")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
+                ToolbarItem(placement: .navigationBarLeading) {
                     Button("Cancel") {
                         dismiss()
                     }
                 }
-                
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
-                        saveBloodwork()
-                    }
-                    .disabled(Double(valueText) == nil)
-                }
             }
-            .onAppear {
-                // Default to user's preferred unit
-                selectedUnit = dataStore.profile.unit
+            .alert(alertMessage, isPresented: $showingAlert) {
+                Button("OK", role: .cancel) { }
             }
         }
     }
     
-    private func saveBloodwork() {
-        guard let value = Double(valueText) else { return }
+    private func saveBloodwork(andCalibrate: Bool) {
+        guard let valueDouble = Double(bloodValue) else {
+            alertMessage = "Please enter a valid number for the blood level"
+            showingAlert = true
+            return
+        }
         
+        // Create a new sample
         let newSample = BloodSample(
-            date: date,
-            value: value,
-            unit: selectedUnit
+            date: bloodDate,
+            value: valueDouble,
+            unit: dataStore.profile.unit
         )
         
-        if let index = dataStore.profile.protocols.firstIndex(where: { $0.id == injectionProtocol.id }) {
-            dataStore.profile.protocols[index].bloodSamples.append(newSample)
-            dataStore.saveProfile()
-            dismiss()
+        // Add to the protocol
+        var updatedProtocol = injectionProtocol
+        updatedProtocol.bloodSamples.append(newSample)
+        
+        // Save back to the data store
+        dataStore.updateProtocol(updatedProtocol)
+        
+        // If requested, perform calibration
+        if andCalibrate {
+            dataStore.calibrateProtocol(updatedProtocol)
         }
+        
+        dismiss()
     }
 }
 
 #Preview {
     AddBloodworkView(injectionProtocol: InjectionProtocol(
         name: "Test Protocol",
-        ester: .cypionate,
         doseMg: 100,
         frequencyDays: 7,
         startDate: Date().addingTimeInterval(-30 * 24 * 3600) // 30 days ago

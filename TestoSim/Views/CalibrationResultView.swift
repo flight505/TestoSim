@@ -3,393 +3,319 @@ import Charts
 
 struct CalibrationResultView: View {
     @EnvironmentObject var dataStore: AppDataStore
-    let injectionProtocol: InjectionProtocol
     
-    // These would be provided by the PK engine during calibration
-    @State private var originalParameters: CalibrationParameters? = nil
-    @State private var calibratedParameters: CalibrationParameters? = nil
-    @State private var correlationCoefficient: Double = 0.0
-    @State private var isLoading = true
+    // Sample calibration data (in a real app, this would come from the model)
+    let calibrationResults: CalibrationResults
+    
+    struct CalibrationResults {
+        let halfLifeDays: Double
+        let absorptionRateFactor: Double
+        let calibrationFactor: Double
+        let treatmentProtocol: InjectionProtocol
+        let compound: Compound
+        let bloodSamples: [BloodSample]
+        let originalPredictions: [DataPoint]
+        let calibratedPredictions: [DataPoint]
+        let rmseImprovement: Double  // Root Mean Square Error improvement percentage
+    }
     
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                // Header section
+                // Header
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Calibration Complete")
+                        .font(.title)
+                        .fontWeight(.bold)
+                    
+                    Text("Protocol: \(calibrationResults.treatmentProtocol.name)")
+                        .font(.headline)
+                    
+                    Text("Compound: \(calibrationResults.compound.fullDisplayName)")
+                        .font(.subheadline)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding()
+                .background(Color.blue.opacity(0.1))
+                .cornerRadius(12)
+                
+                // Chart
+                chartSection
+                
+                // Parameters
+                parametersSection
+                
+                // Blood Samples
+                bloodSamplesSection
+                
+                // Improvement metrics
+                improvementSection
+            }
+            .padding()
+        }
+    }
+    
+    var chartSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Calibration Results")
+                .font(.headline)
+            
+            Text("The chart shows the original and calibrated testosterone predictions alongside your blood samples.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+            
+            Chart {
+                // Original prediction line
+                ForEach(calibrationResults.originalPredictions) { point in
+                    LineMark(
+                        x: .value("Date", point.time),
+                        y: .value("Level", point.level)
+                    )
+                    .foregroundStyle(.orange)
+                    .lineStyle(StrokeStyle(lineWidth: 2, dash: [5, 3]))
+                }
+                
+                // Calibrated prediction line
+                ForEach(calibrationResults.calibratedPredictions) { point in
+                    LineMark(
+                        x: .value("Date", point.time),
+                        y: .value("Level", point.level)
+                    )
+                    .foregroundStyle(.blue)
+                    .lineStyle(StrokeStyle(lineWidth: 2))
+                }
+                
+                // Blood samples as points
+                ForEach(calibrationResults.bloodSamples) { sample in
+                    PointMark(
+                        x: .value("Date", sample.date),
+                        y: .value("Level", sample.value)
+                    )
+                    .foregroundStyle(.red)
+                    .symbolSize(100)
+                }
+            }
+            .frame(height: 250)
+            
+            // Legend
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Circle()
+                        .fill(Color.red)
+                        .frame(width: 8, height: 8)
+                    Text("Blood Samples")
+                        .font(.caption)
+                }
+                
+                HStack {
+                    Rectangle()
+                        .fill(Color.orange)
+                        .frame(width: 15, height: 2)
+                    Text("Original Prediction")
+                        .font(.caption)
+                }
+                
+                HStack {
+                    Rectangle()
+                        .fill(Color.blue)
+                        .frame(width: 15, height: 2)
+                    Text("Calibrated Prediction")
+                        .font(.caption)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, 4)
+        }
+        .padding()
+        .background(Color.gray.opacity(0.1))
+        .cornerRadius(12)
+    }
+    
+    var parametersSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Calibrated Parameters")
+                .font(.headline)
+            
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text("Half-life:")
+                        .fontWeight(.semibold)
+                    Spacer()
+                    Text("\(calibrationResults.halfLifeDays, specifier: "%.1f") days")
+                }
+                
+                HStack {
+                    Text("Absorption rate:")
+                        .fontWeight(.semibold)
+                    Spacer()
+                    Text("\(calibrationResults.absorptionRateFactor, specifier: "%.2f")x")
+                }
+                
+                HStack {
+                    Text("Calibration factor:")
+                        .fontWeight(.semibold)
+                    Spacer()
+                    Text("\(calibrationResults.calibrationFactor, specifier: "%.2f")x")
+                }
+                
+                Divider()
+                
+                HStack {
+                    Text("Based on:")
+                        .fontWeight(.semibold)
+                    Spacer()
+                    Text("\(calibrationResults.bloodSamples.count) blood samples")
+                }
+            }
+        }
+        .padding()
+        .background(Color.gray.opacity(0.1))
+        .cornerRadius(12)
+    }
+    
+    var bloodSamplesSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Blood Samples Used")
+                .font(.headline)
+            
+            ForEach(calibrationResults.bloodSamples) { sample in
                 HStack {
                     VStack(alignment: .leading) {
-                        Text("Calibration Results")
-                            .font(.title)
-                            .bold()
-                        
-                        Text("Protocol: \(injectionProtocol.name)")
+                        Text(formatDate(sample.date))
                             .font(.subheadline)
                     }
                     
                     Spacer()
                     
-                    Image(systemName: "slider.horizontal.3")
-                        .font(.system(size: 40))
-                        .foregroundColor(.blue)
-                        .opacity(0.7)
+                    Text("\(sample.value, specifier: "%.1f") \(dataStore.profile.unit)")
+                        .fontWeight(.semibold)
                 }
-                .padding()
+                .padding(.vertical, 4)
                 
-                if isLoading {
-                    // Loading indicator
-                    ProgressView("Calculating parameters...")
-                        .frame(maxWidth: .infinity, alignment: .center)
-                        .padding()
-                } else {
-                    // Results
-                    VStack(alignment: .leading, spacing: 15) {
-                        // Model Fit Quality
-                        Section(header: SectionHeader(title: "Model Fit Quality")) {
-                            HStack {
-                                Text("Correlation coefficient:")
-                                Spacer()
-                                Text(String(format: "%.3f", correlationCoefficient))
-                                    .bold()
-                            }
-                            .padding(.horizontal)
-                            
-                            // Correlation coefficient visualization
-                            CorrelationBar(value: correlationCoefficient)
-                                .frame(height: 30)
-                                .padding(.horizontal)
-                            
-                            Text(correlationQualityDescription)
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                                .padding(.horizontal)
-                        }
-                        
-                        // Parameter Comparison
-                        if let original = originalParameters, let calibrated = calibratedParameters {
-                            Section(header: SectionHeader(title: "Calibration Parameters")) {
-                                ParameterComparisonView(
-                                    parameterName: "Elimination Rate (ke)",
-                                    originalValue: original.ke,
-                                    calibratedValue: calibrated.ke,
-                                    unit: "day⁻¹"
-                                )
-                                
-                                ParameterComparisonView(
-                                    parameterName: "Absorption Rate (ka)",
-                                    originalValue: original.ka,
-                                    calibratedValue: calibrated.ka,
-                                    unit: "day⁻¹"
-                                )
-                                
-                                ParameterComparisonView(
-                                    parameterName: "Effective Half-life",
-                                    originalValue: log(2) / original.ke,
-                                    calibratedValue: log(2) / calibrated.ke,
-                                    unit: "days"
-                                )
-                                
-                                ParameterComparisonView(
-                                    parameterName: "Calibration Factor",
-                                    originalValue: 1.0,
-                                    calibratedValue: dataStore.profile.calibrationFactor,
-                                    unit: ""
-                                )
-                            }
-                        }
-                        
-                        // Blood Level Prediction
-                        Section(header: SectionHeader(title: "Predicted vs Actual Levels")) {
-                            if injectionProtocol.bloodSamples.isEmpty {
-                                Text("No blood samples available for comparison")
-                                    .foregroundColor(.secondary)
-                                    .padding(.horizontal)
-                            } else {
-                                // Simple chart showing predicted vs actual blood levels
-                                Chart {
-                                    ForEach(injectionProtocol.bloodSamples) { sample in
-                                        PointMark(
-                                            x: .value("Date", sample.date),
-                                            y: .value("Level", sample.value)
-                                        )
-                                        .foregroundStyle(.red)
-                                        .symbol(.circle)
-                                        .symbolSize(60)
-                                        
-                                        // Predicted level at this date (using original model)
-                                        let originalPrediction = dataStore.calculateLevelWithParameters(
-                                            at: sample.date, 
-                                            for: injectionProtocol, 
-                                            using: 1.0,
-                                            parameters: originalParameters
-                                        )
-                                        
-                                        PointMark(
-                                            x: .value("Date", sample.date),
-                                            y: .value("Original Prediction", originalPrediction)
-                                        )
-                                        .foregroundStyle(.blue)
-                                        .symbol(.square)
-                                        .symbolSize(40)
-                                        
-                                        // Predicted level at this date (using calibrated model)
-                                        let calibratedPrediction = dataStore.calculateLevel(
-                                            at: sample.date, 
-                                            for: injectionProtocol, 
-                                            using: dataStore.profile.calibrationFactor
-                                        )
-                                        
-                                        PointMark(
-                                            x: .value("Date", sample.date),
-                                            y: .value("Calibrated Prediction", calibratedPrediction)
-                                        )
-                                        .foregroundStyle(.green)
-                                        .symbol(.diamond)
-                                        .symbolSize(60)
-                                    }
-                                }
-                                .frame(height: 200)
-                                .padding(.horizontal)
-                                
-                                // Legend
-                                HStack {
-                                    LegendItem(color: .red, symbol: "circle.fill", label: "Actual")
-                                    LegendItem(color: .blue, symbol: "square.fill", label: "Original Prediction")
-                                    LegendItem(color: .green, symbol: "diamond.fill", label: "Calibrated")
-                                }
-                                .padding(.horizontal)
-                            }
-                        }
-                        
-                        // Explanation
-                        Section(header: SectionHeader(title: "Understanding Calibration")) {
-                            Text("The Bayesian calibration process adjusts the model parameters to better match your actual blood test results. This makes future predictions more accurate for your specific body.")
-                                .font(.body)
-                                .padding(.horizontal)
-                            
-                            Text("• Elimination Rate (ke): How quickly your body clears the hormone")
-                                .font(.caption)
-                                .padding(.horizontal)
-                            
-                            Text("• Absorption Rate (ka): How quickly the hormone is absorbed from the injection site")
-                                .font(.caption)
-                                .padding(.horizontal)
-                            
-                            Text("• Higher correlation values (closer to 1.0) indicate a better model fit")
-                                .font(.caption)
-                                .padding(.horizontal)
-                        }
-                    }
+                if sample.id != calibrationResults.bloodSamples.last?.id {
+                    Divider()
                 }
             }
-            .padding()
-            .onAppear {
-                // Simulate loading the data (would actually come from the PK engine)
-                loadCalibrationData()
-            }
         }
-        .navigationTitle("Calibration Details")
+        .padding()
+        .background(Color.gray.opacity(0.1))
+        .cornerRadius(12)
     }
     
-    private var correlationQualityDescription: String {
-        if correlationCoefficient >= 0.9 {
-            return "Excellent fit: The model very accurately predicts your blood levels."
-        } else if correlationCoefficient >= 0.8 {
-            return "Good fit: The model predictions closely match your blood levels."
-        } else if correlationCoefficient >= 0.6 {
-            return "Acceptable fit: The model is generally aligned with your blood levels."
-        } else if correlationCoefficient >= 0.4 {
-            return "Moderate fit: The model has some predictive value but with notable deviations."
-        } else {
-            return "Poor fit: The model may not accurately predict your blood levels. Consider adding more blood samples."
-        }
+    // Helper function to format dates
+    private func formatDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter.string(from: date)
     }
     
-    private func loadCalibrationData() {
-        // In a real implementation, this would fetch data from the PK engine
-        // For now, we'll simulate loading with placeholder data
-        
-        // Simulate a loading delay
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-            // Create placeholder data based on the protocol's ester
-            let defaultHalfLife = injectionProtocol.ester.halfLifeDays
-            let ke = log(2) / defaultHalfLife
+    var improvementSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Calibration Quality")
+                .font(.headline)
             
-            // Assume some nominal values for the original parameters
-            self.originalParameters = CalibrationParameters(
-                ke: ke,
-                ka: 0.5  // A typical absorption rate
-            )
-            
-            // Simulate calibrated parameters with some variation
-            self.calibratedParameters = CalibrationParameters(
-                ke: ke * (0.8 + 0.4 * Double.random(in: 0...1)),  // +/- 20% variation
-                ka: 0.5 * (0.7 + 0.6 * Double.random(in: 0...1))  // +/- 30% variation
-            )
-            
-            // Simulate a reasonable correlation coefficient
-            self.correlationCoefficient = 0.7 + 0.25 * Double.random(in: 0...1)
-            
-            self.isLoading = false
-        }
-    }
-}
-
-// MARK: - Supporting Types
-
-struct CalibrationParameters {
-    let ke: Double  // Elimination rate constant (day^-1)
-    let ka: Double  // Absorption rate constant (day^-1)
-}
-
-// MARK: - Supporting Views
-
-struct SectionHeader: View {
-    let title: String
-    
-    var body: some View {
-        Text(title)
-            .font(.headline)
-            .foregroundColor(.primary)
-            .padding(.horizontal)
-            .padding(.top, 10)
-    }
-}
-
-struct CorrelationBar: View {
-    let value: Double
-    
-    var body: some View {
-        GeometryReader { geometry in
-            ZStack(alignment: .leading) {
-                Rectangle()
-                    .frame(width: geometry.size.width, height: geometry.size.height)
-                    .opacity(0.2)
-                    .foregroundColor(.gray)
+            HStack {
+                VStack(alignment: .leading) {
+                    Text("Prediction Improvement:")
+                        .fontWeight(.semibold)
+                    Text("The calibrated model is \(calibrationResults.rmseImprovement, specifier: "%.1f")% more accurate")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
                 
-                Rectangle()
-                    .frame(width: min(CGFloat(value) * geometry.size.width, geometry.size.width), height: geometry.size.height)
-                    .foregroundColor(correlationColor)
+                Spacer()
+                
+                // Simple quality indicator
+                ZStack {
+                    Circle()
+                        .stroke(Color.gray.opacity(0.3), lineWidth: 6)
+                        .frame(width: 50, height: 50)
+                    
+                    Circle()
+                        .trim(from: 0, to: min(1.0, calibrationResults.rmseImprovement / 100))
+                        .stroke(
+                            calibrationResults.rmseImprovement > 50 ? Color.green :
+                                calibrationResults.rmseImprovement > 25 ? Color.yellow : Color.red,
+                            lineWidth: 6
+                        )
+                        .frame(width: 50, height: 50)
+                        .rotationEffect(.degrees(-90))
+                    
+                    Text("\(Int(calibrationResults.rmseImprovement))%")
+                        .font(.system(size: 12, weight: .bold))
+                }
             }
-            .cornerRadius(5)
         }
-    }
-    
-    var correlationColor: Color {
-        if value >= 0.9 {
-            return .green
-        } else if value >= 0.7 {
-            return .blue
-        } else if value >= 0.5 {
-            return .yellow
-        } else {
-            return .red
-        }
+        .padding()
+        .background(Color.gray.opacity(0.1))
+        .cornerRadius(12)
     }
 }
 
-struct ParameterComparisonView: View {
-    let parameterName: String
-    let originalValue: Double
-    let calibratedValue: Double
-    let unit: String
-    
-    var percentChange: Double {
-        ((calibratedValue / originalValue) - 1.0) * 100.0
-    }
-    
-    var body: some View {
-        VStack(alignment: .leading) {
-            Text(parameterName)
-                .font(.subheadline)
-                .padding(.horizontal)
-            
-            HStack {
-                Text("Original:")
-                    .foregroundColor(.secondary)
-                Spacer()
-                Text("\(String(format: "%.3f", originalValue)) \(unit)")
-                    .monospacedDigit()
-            }
-            .padding(.horizontal)
-            
-            HStack {
-                Text("Calibrated:")
-                    .foregroundColor(.secondary)
-                Spacer()
-                Text("\(String(format: "%.3f", calibratedValue)) \(unit)")
-                    .monospacedDigit()
-                    .bold()
-            }
-            .padding(.horizontal)
-            
-            HStack {
-                Text("Change:")
-                    .foregroundColor(.secondary)
-                Spacer()
-                Text("\(percentChange >= 0 ? "+" : "")\(String(format: "%.1f", percentChange))%")
-                    .foregroundColor(percentChange >= 0 ? .green : .red)
-                    .bold()
-            }
-            .padding(.horizontal)
-            .padding(.bottom, 5)
-        }
-        .padding(.vertical, 5)
-        .background(Color(.systemGray6))
-        .cornerRadius(10)
-        .padding(.horizontal)
-    }
-}
-
-struct LegendItem: View {
-    let color: Color
-    let symbol: String
-    let label: String
-    
-    var body: some View {
-        HStack(spacing: 4) {
-            Image(systemName: symbol)
-                .foregroundColor(color)
-            
-            Text(label)
-                .font(.caption)
-                .foregroundColor(.secondary)
-        }
-    }
-}
-
-// MARK: - Extend AppDataStore for calibration
-
-extension AppDataStore {
-    // This would be a real method that uses specific parameters for calculation
-    func calculateLevelWithParameters(
-        at targetDate: Date,
-        for injectionProtocol: InjectionProtocol,
-        using calibrationFactor: Double,
-        parameters: CalibrationParameters?
-    ) -> Double {
-        // In a real implementation, this would use the specific parameters
-        // For now, just return a value that's slightly different from the normal calculation
-        let standardLevel = calculateLevel(at: targetDate, for: injectionProtocol, using: calibrationFactor)
-        guard let parameters = parameters else { return standardLevel }
+// Preview
+struct CalibrationResultView_Previews: PreviewProvider {
+    static var previews: some View {
+        // Create sample data for preview
+        let appDataStore = AppDataStore()
         
-        // Simulate a difference based on parameter ratio
-        let defaultHalfLife = injectionProtocol.ester.halfLifeDays
-        let defaultKe = log(2) / defaultHalfLife
-        let factor = parameters.ke / defaultKe
+        // Create a sample compound
+        let compound = Compound(
+            id: UUID(),
+            commonName: "Testosterone Cypionate",
+            classType: .testosterone,
+            ester: "cypionate",
+            halfLifeDays: 8.0,
+            defaultBioavailability: [.intramuscular: 1.0],
+            defaultAbsorptionRateKa: [.intramuscular: 0.7]
+        )
         
-        return standardLevel * (0.7 + 0.6 * factor)
-    }
-}
-
-#Preview {
-    NavigationView {
-        CalibrationResultView(injectionProtocol: InjectionProtocol(
+        // Create a sample protocol
+        let testProtocol = InjectionProtocol(
             name: "Test Protocol",
-            ester: .cypionate,
             doseMg: 100,
             frequencyDays: 7,
-            startDate: Date().addingTimeInterval(-30 * 24 * 3600),
-            notes: "Test protocol"
-        ))
-        .environmentObject(AppDataStore())
+            startDate: Date().addingTimeInterval(-60*60*24*30) // 30 days ago
+        )
+        
+        // Add compoundID to the protocol
+        var updatedProtocol = testProtocol
+        updatedProtocol.compoundID = compound.id
+        
+        // Create sample blood samples
+        let bloodSamples: [BloodSample] = [
+            BloodSample(date: Date().addingTimeInterval(-60*60*24*20), value: 650, unit: "ng/dL"),
+            BloodSample(date: Date().addingTimeInterval(-60*60*24*10), value: 750, unit: "ng/dL"),
+            BloodSample(date: Date().addingTimeInterval(-60*60*24*2), value: 550, unit: "ng/dL"),
+        ]
+        
+        // Create sample prediction points
+        let originalPredictions: [DataPoint] = (0...30).map { i in
+            let date = Date().addingTimeInterval(-60*60*24*Double(30-i))
+            let baseValue = 500.0 + 200 * sin(Double(i) / 7.0 * .pi)
+            return DataPoint(time: date, level: baseValue)
+        }
+        
+        let calibratedPredictions: [DataPoint] = (0...30).map { i in
+            let date = Date().addingTimeInterval(-60*60*24*Double(30-i))
+            let baseValue = 600.0 + 150 * sin(Double(i) / 7.0 * .pi)
+            return DataPoint(time: date, level: baseValue)
+        }
+        
+        // Create sample calibration results
+        let sampleResults = CalibrationResultView.CalibrationResults(
+            halfLifeDays: 7.5,
+            absorptionRateFactor: 1.2,
+            calibrationFactor: 0.95,
+            treatmentProtocol: updatedProtocol,
+            compound: compound,
+            bloodSamples: bloodSamples,
+            originalPredictions: originalPredictions,
+            calibratedPredictions: calibratedPredictions,
+            rmseImprovement: 62.5
+        )
+        
+        return CalibrationResultView(calibrationResults: sampleResults)
+            .environmentObject(appDataStore)
     }
 } 

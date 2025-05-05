@@ -97,22 +97,50 @@ extension InjectionProtocol {
     init?(from cdProtocol: CDInjectionProtocol) {
         guard let id = cdProtocol.id,
               let name = cdProtocol.name,
-              let startDate = cdProtocol.startDate,
-              let cdEster = cdProtocol.ester else {
-            return nil
-        }
-        
-        guard let ester = TestosteroneEster.all.first(where: { $0.id == cdEster.id }) else {
+              let startDate = cdProtocol.startDate else {
             return nil
         }
         
         self.id = id
         self.name = name
-        self.ester = ester
         self.doseMg = cdProtocol.doseMg
         self.frequencyDays = cdProtocol.frequencyDays
         self.startDate = startDate
         self.notes = cdProtocol.notes
+        
+        // Try to extract extended properties from notes
+        if let notes = cdProtocol.notes, notes.contains("---EXTENDED_DATA---") {
+            if let range = notes.range(of: "---EXTENDED_DATA---") {
+                let startIndex = range.upperBound
+                let jsonString = String(notes[startIndex...]).trimmingCharacters(in: .whitespacesAndNewlines)
+                
+                if !jsonString.isEmpty, let jsonData = jsonString.data(using: .utf8) {
+                    do {
+                        if let extendedData = try JSONSerialization.jsonObject(with: jsonData, options: []) as? [String: String] {
+                            // Extract properties
+                            if let protocolTypeStr = extendedData["protocolType"], 
+                               let protocolType = ProtocolType(rawValue: protocolTypeStr) {
+                                // Protocol type will be set via computed property
+                            }
+                            
+                            if let compoundIDStr = extendedData["compoundID"], !compoundIDStr.isEmpty {
+                                self.compoundID = UUID(uuidString: compoundIDStr)
+                            }
+                            
+                            if let blendIDStr = extendedData["blendID"], !blendIDStr.isEmpty {
+                                self.blendID = UUID(uuidString: blendIDStr)
+                            }
+                            
+                            if let routeStr = extendedData["selectedRoute"], !routeStr.isEmpty {
+                                self.selectedRoute = routeStr
+                            }
+                        }
+                    } catch {
+                        print("Error parsing extended data JSON: \(error)")
+                    }
+                }
+            }
+        }
         
         // Extract blood samples
         if let cdSamples = cdProtocol.bloodSamples as? Set<CDBloodSample> {
@@ -144,31 +172,34 @@ extension InjectionProtocol {
             cdProtocol.doseMg = self.doseMg
             cdProtocol.frequencyDays = self.frequencyDays
             cdProtocol.startDate = self.startDate
-            cdProtocol.notes = self.notes
             
-            // Handle the ester relationship
-            // Find or create the CDCompound for the ester
-            let esterID = self.ester.id
-            let esterName = self.ester.name
-            let esterHalfLife = self.ester.halfLifeDays
+            // Store extended properties in notes field as JSON
+            var userNotes = self.notes ?? ""
             
-            let esterFetchRequest: NSFetchRequest<CDCompound> = CDCompound.fetchRequest()
-            esterFetchRequest.predicate = NSPredicate(format: "id == %@", esterID as CVarArg)
-            
-            let esterResults = try context.fetch(esterFetchRequest)
-            let cdEster: CDCompound
-            
-            if let existingEster = esterResults.first {
-                cdEster = existingEster
-            } else {
-                cdEster = CDCompound(context: context)
-                cdEster.id = esterID
-                cdEster.commonName = esterName
-                cdEster.halfLifeDays = esterHalfLife
-                cdEster.classType = "testosterone" // Default for ester compounds
+            // Remove existing extended data section if present
+            if let range = userNotes.range(of: "---EXTENDED_DATA---") {
+                userNotes = String(userNotes[..<range.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
             }
             
-            cdProtocol.ester = cdEster
+            // Create the extended data dictionary
+            let extendedData: [String: String] = [
+                "protocolType": self.protocolType.rawValue,
+                "compoundID": self.compoundID?.uuidString ?? "",
+                "blendID": self.blendID?.uuidString ?? "",
+                "selectedRoute": self.selectedRoute ?? ""
+            ]
+            
+            if let extendedJSON = try? JSONEncoder().encode(extendedData),
+               let jsonString = String(data: extendedJSON, encoding: .utf8) {
+                // Append to notes
+                if !userNotes.isEmpty {
+                    cdProtocol.notes = userNotes + "\n\n---EXTENDED_DATA---\n" + jsonString
+                } else {
+                    cdProtocol.notes = "---EXTENDED_DATA---\n" + jsonString
+                }
+            } else {
+                cdProtocol.notes = userNotes
+            }
             
             // Handle blood samples
             // First, remove all existing samples

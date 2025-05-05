@@ -8,14 +8,57 @@ class CoreDataManager {
     // MARK: - Core Data stack
     
     lazy var persistentContainer: NSPersistentContainer = {
-        // Use a regular NSPersistentContainer instead of CloudKit to avoid crashes
-        let container = NSPersistentContainer(name: "TestoSim")
+        // Set up the CloudKit container
+        let cloudKitContainerID = "iCloud.flight505.TestoSim"
+        
+        // Check if iCloud sync is enabled via UserDefaults
+        let usesICloudSync = UserDefaults.standard.bool(forKey: "usesICloudSync")
+        
+        // Use NSPersistentCloudKitContainer if iCloud sync is enabled, otherwise use regular NSPersistentContainer
+        let container: NSPersistentContainer
+        
+        if usesICloudSync {
+            container = NSPersistentCloudKitContainer(name: "TestoSim")
+            print("Using CloudKit-enabled persistent container")
+            
+            // Configure CloudKit integration
+            if let cloudStoreDescription = container.persistentStoreDescriptions.first {
+                // Enable CloudKit
+                cloudStoreDescription.cloudKitContainerOptions = NSPersistentCloudKitContainerOptions(containerIdentifier: cloudKitContainerID)
+                
+                // Enable history tracking (required for CloudKit sync)
+                cloudStoreDescription.setOption(true as NSNumber, forKey: NSPersistentHistoryTrackingKey)
+                cloudStoreDescription.setOption(true as NSNumber, forKey: NSPersistentStoreRemoteChangeNotificationPostOptionKey)
+            }
+        } else {
+            container = NSPersistentContainer(name: "TestoSim")
+            print("Using standard persistent container (CloudKit disabled)")
+        }
         
         // Initialize the Core Data stack
         container.loadPersistentStores(completionHandler: { (storeDescription, error) in
             if let error = error as NSError? {
                 // Replace this implementation with code to handle the error appropriately.
-                print("Unresolved error \(error), \(error.userInfo)")
+                print("Unresolved error loading persistent stores: \(error), \(error.userInfo)")
+                
+                // Log CloudKit specific issues if present
+                if let cloudError = error.userInfo[NSUnderlyingErrorKey] as? NSError,
+                   cloudError.domain == CKErrorDomain {
+                    print("CloudKit error: \(cloudError.localizedDescription)")
+                }
+            } else {
+                print("Successfully loaded persistent store: \(storeDescription)")
+                
+                // Initialize CloudKit schema if CloudKit is enabled
+                if let cloudKitOptions = storeDescription.cloudKitContainerOptions,
+                   let cloudKitContainer = container as? NSPersistentCloudKitContainer {
+                    do {
+                        try cloudKitContainer.initializeCloudKitSchema(options: [.printSchema])
+                        print("CloudKit schema initialized successfully")
+                    } catch {
+                        print("Error initializing CloudKit schema: \(error)")
+                    }
+                }
             }
         })
         
@@ -33,9 +76,10 @@ class CoreDataManager {
         if context.hasChanges {
             do {
                 try context.save()
+                print("Context saved successfully")
             } catch {
                 let nserror = error as NSError
-                print("Unresolved error \(nserror), \(nserror.userInfo)")
+                print("Unresolved error saving context: \(nserror), \(nserror.userInfo)")
             }
         }
     }
@@ -49,8 +93,24 @@ class CoreDataManager {
     // MARK: - iCloud Sync Control
     
     func enableCloudSync(_ enable: Bool) {
-        // This is now a placeholder since we're not using CloudKit
-        UserDefaults.standard.set(enable, forKey: "usesICloudSync")
+        let currentSetting = UserDefaults.standard.bool(forKey: "usesICloudSync")
+        
+        // Only update if the setting has changed
+        if currentSetting != enable {
+            UserDefaults.standard.set(enable, forKey: "usesICloudSync")
+            
+            // Notify the user that a restart is required
+            let notification = Notification(name: Notification.Name("CloudKitSyncSettingChanged"), 
+                                           object: nil, 
+                                           userInfo: ["enabled": enable])
+            NotificationCenter.default.post(notification)
+            
+            print("CloudKit sync \(enable ? "enabled" : "disabled") - app restart required for changes to take effect")
+        }
+    }
+    
+    func isCloudSyncEnabled() -> Bool {
+        return UserDefaults.standard.bool(forKey: "usesICloudSync")
     }
     
     // MARK: - Migration
@@ -89,43 +149,48 @@ class CoreDataManager {
             cdProfile.biologicalSex = profile.biologicalSex.rawValue
             cdProfile.usesICloudSync = profile.usesICloudSync
             
-            // Create any referenced compounds from the library first
-            // (Typically we'd load these from CompoundLibrary)
-            var compoundMap = [UUID: CDCompound]()
-            
             // Create CDInjectionProtocol entries
             for p in profile.protocols {
                 let cdProtocol = CDInjectionProtocol(context: context)
                 cdProtocol.id = p.id
                 cdProtocol.name = p.name
-                
-                // Find or create the ester compound
-                let esterID = p.ester.id
-                let cdEster: CDCompound
-                if let existingEster = compoundMap[esterID] {
-                    cdEster = existingEster
-                } else {
-                    // Create a new compound
-                    cdEster = CDCompound(context: context)
-                    cdEster.id = esterID
-                    cdEster.commonName = p.ester.name
-                    cdEster.halfLifeDays = p.ester.halfLifeDays
-                    cdEster.classType = "testosterone" // Default during migration
-                    
-                    // We'd need to handle the dictionaries by serializing them, omitted for brevity
-                    compoundMap[esterID] = cdEster
-                }
-                
-                cdProtocol.ester = cdEster
                 cdProtocol.doseMg = p.doseMg
                 cdProtocol.frequencyDays = p.frequencyDays
                 cdProtocol.startDate = p.startDate
                 cdProtocol.notes = p.notes
                 
-                // Add protocol to profile
-                cdProfile.addToProtocols(cdProtocol)
+                // TODO: The Core Data model needs to be updated to include these properties:
+                // - compoundID (UUID)
+                // - blendID (UUID)
+                // - selectedRoute (String)
+                // Once added, uncomment the following lines:
+                /*
+                cdProtocol.compoundID = p.compoundID
+                cdProtocol.blendID = p.blendID
+                cdProtocol.selectedRoute = p.selectedRoute
+                */
                 
-                // Create CDBloodSample entries
+                // For now, store this information in the notes field
+                var extendedInfo = ""
+                if let compoundID = p.compoundID {
+                    extendedInfo += "CompoundID: \(compoundID.uuidString)\n"
+                }
+                if let blendID = p.blendID {
+                    extendedInfo += "BlendID: \(blendID.uuidString)\n"
+                }
+                if let route = p.selectedRoute {
+                    extendedInfo += "Route: \(route)\n"
+                }
+                
+                if !extendedInfo.isEmpty {
+                    if cdProtocol.notes != nil {
+                        cdProtocol.notes = cdProtocol.notes! + "\n\n---EXTENDED_DATA---\n" + extendedInfo
+                    } else {
+                        cdProtocol.notes = "---EXTENDED_DATA---\n" + extendedInfo
+                    }
+                }
+                
+                // Create blood samples
                 for sample in p.bloodSamples {
                     let cdSample = CDBloodSample(context: context)
                     cdSample.id = sample.id
@@ -133,19 +198,21 @@ class CoreDataManager {
                     cdSample.value = sample.value
                     cdSample.unit = sample.unit
                     
-                    // Add sample to protocol
                     cdProtocol.addToBloodSamples(cdSample)
                 }
+                
+                cdProfile.addToProtocols(cdProtocol)
             }
             
-            // Save the context
+            // Save to Core Data
             try context.save()
             
             // Mark as migrated
             UserDefaults.standard.set(true, forKey: "migrated")
+            print("Successfully migrated user profile from JSON to Core Data")
             
         } catch {
-            print("Failed to migrate data: \(error)")
+            print("Error migrating from JSON: \(error)")
         }
     }
 } 

@@ -8,7 +8,7 @@
     <true/>
     <key>com.apple.developer.icloud-container-identifiers</key>
     <array>
-        <string>iCloud.com.yourcompany.TestoSim</string>
+        <string>iCloud.flight505.TestoSim</string>
     </array>
     <key>com.apple.developer.icloud-services</key>
     <array>

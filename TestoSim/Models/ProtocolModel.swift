@@ -3,28 +3,26 @@ import Foundation
 struct InjectionProtocol: Identifiable, Codable {
     var id: UUID = UUID()
     var name: String
-    var ester: TestosteroneEster
     var doseMg: Double
     var frequencyDays: Double
     var startDate: Date
     var notes: String?
     var bloodSamples: [BloodSample] = []
     
-    // MARK: - New properties for compound/blend support
-    
-    // Optional properties for refined PK model
+    // Properties for compound/blend support
     var compoundID: UUID?
     var blendID: UUID?
-    var selectedRoute: String? // Will store Compound.Route.rawValue
+    var selectedRoute: String? // Stores Compound.Route.rawValue
     
-    // Computed property to determine what type of protocol this is
+    // Computed property to determine protocol type
     var protocolType: ProtocolType {
         if compoundID != nil {
             return .compound
         } else if blendID != nil {
             return .blend
         } else {
-            return .legacyEster
+            // This should not happen in new protocols
+            return .compound // Default to compound
         }
     }
     
@@ -76,7 +74,6 @@ struct InjectionProtocol: Identifiable, Codable {
 // MARK: - Protocol type enum
 
 enum ProtocolType: String, Codable {
-    case legacyEster // Using original TestosteroneEster
     case compound    // Using single Compound
     case blend       // Using VialBlend
 } 
