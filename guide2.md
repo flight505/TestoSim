@@ -11,6 +11,7 @@
 | 13 | AI Insights | 🟡 75% Complete (Mock implementation with UI ready, OpenAI integration prepared) |
 | 14 | UI/UX Polish & Animations | ❌ 0% Not Started |
 | 15 | Testing & Validation | ❌ 0% Not Started |
+| 16 | Help Center & Documentation | ❌ 0% Not Started |
 
 ## Code Conventions & Naming Guidelines
 
@@ -46,6 +47,7 @@ The following backend features have been implemented but need UI components:
 | CloudKit Sync Toggle | ✅ Complete | ✅ Added | Toggle exists in settings and CloudKit integration has been fixed |
 | Compound Selection Standardization | ✅ Complete | ✅ Implemented | Simplified UI to use the Compound model instead of redundant TestosteroneEster model |
 | Notification & Adherence System | ✅ Complete | ✅ Implemented | Added full notification system with adherence tracking and statistics |
+| Help Center & Documentation | ⚠️ Partial | ❌ Not Started | Need to create centralized help system with dedicated views for each topic |
 
 **Priority Tasks:**
 0. ✅ start by adding a test user profile to the app and fill in the values, as well as a test protocol, this will help us testing the app with out having to type in the values every time, it should be easy to delete this after testing. (also add in this document when we should remove this test data)
@@ -413,6 +415,89 @@ struct Compound: Identifiable, Codable, Hashable {
 |          | 100 mg Tren A Q2D × 14 d steady-state \~6× baseline ([Wikipedia][10])                                              | Δ ≤ 10 %                 |
 | **UI**   | Notification permission flow, drag-drop in cycle builder                                                           | No crash, state persists |
 | **Perf** | Simulate 5-compound 20-week plan on iPhone 12                                                                      | < 50 ms average          |
+
+---
+
+## Story 16 — Help Center & Documentation
+
+*Comprehensive in-app learning center*
+
+* [ ] **Core Help Center Architecture**
+  * [ ] Create `HelpCenterView` as the main entry point for all documentation
+  * [ ] Implement topic-based navigation with hierarchical structure
+  * [ ] Create consistent visual styling and interactive elements
+  * [ ] Design for high readability with appropriate typography and spacing
+  * [ ] Add global access through navigation bar help button
+
+* [ ] **PK Model Documentation**
+  * [ ] Create detailed explanations of the two-compartment model
+  * [ ] Develop interactive visualizations showing compound movement between compartments
+  * [ ] Include scientific foundation with simplified explanations
+  * [ ] Provide practical examples showing how the model predicts real-world concentrations
+  * [ ] Explain key pharmacokinetic parameters (ke, ka, α, β, Vd)
+
+* [ ] **Educational Content Modules**
+  * [ ] **PKModelExplanationView**: Two-compartment model details and benefits
+    * Visual representation of central and peripheral compartments
+    * Animation showing compound distribution and elimination
+    * Explanation of why two compartments produces more accurate predictions
+    * Comparison with simpler one-compartment models
+
+  * [ ] **AllometricScalingView**: Enhanced version of existing content
+    * Expanded visualization of scaling equations
+    * Clearer connection to PK model concepts
+    * Additional scientific foundation with accessible explanations
+
+  * [ ] **ApplicationGuideView**: Practical usage tutorials
+    * Protocol creation walkthrough
+    * Blood test integration explanation
+    * Calibration process explanation
+    * Step-by-step instructions with screenshots
+
+  * [ ] **CyclePlannerGuideView**: Multi-compound cycle documentation
+    * Explanation of cycle planner functionality
+    * Multi-compound interactions and considerations
+    * Visual interpretation guide for cycle simulations
+    * Best practices for monitoring during cycles
+
+* [ ] **UI Implementation**
+  * [ ] Add global help button in navigation bar across app
+    ```swift
+    .toolbar {
+        ToolbarItem(placement: .navigationBarTrailing) {
+            Button {
+                showingHelpCenter = true
+            } label: {
+                Image(systemName: "questionmark.circle")
+            }
+        }
+    }
+    .sheet(isPresented: $showingHelpCenter) {
+        HelpCenterView()
+    }
+    ```
+  * [ ] Create consistent section styling with cards and grid layouts
+  * [ ] Implement topic filtering and search functionality
+  * [ ] Design expandable sections for progressive disclosure
+  * [ ] Support both light and dark mode with appropriate contrast
+
+* [ ] **Content Organization**
+  * [ ] Move existing explanatory content into the centralized Help Center
+  * [ ] Remove redundant "Advanced PK Model" explanatory text from ProfileView
+  * [ ] Create new illustrations and animations for complex concepts
+  * [ ] Ensure content is scientifically accurate but accessible to users
+
+* [ ] **Integration Plan**
+  * [ ] Create Help directory in Views folder with modular components
+  * [ ] Update ContentView and primary feature views with Help button
+  * [ ] Add state variables to manage help presentation
+  * [ ] Implement deep-linking to specific help topics from relevant screens
+
+* [ ] **Clean-up Tasks**
+  * [ ] Remove or consolidate scattered explanatory content
+  * [ ] Establish consistent typography and visual hierarchy
+  * [ ] Ensure all help content is accessible with proper semantic markup
+  * [ ] Add contextual help links in appropriate locations
 
 ---
 

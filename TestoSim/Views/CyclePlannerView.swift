@@ -331,6 +331,14 @@ struct CycleDetailView: View {
                     }
                 }
             }
+            .sheet(isPresented: $isPresentingStageForm) {
+                CycleStageFormView(isPresented: $isPresentingStageForm, cycle: cycle)
+                    .environmentObject(dataStore)
+            }
+            .sheet(isPresented: $isPresentingEditForm) {
+                // TODO: Add edit cycle form here
+                Text("Edit Cycle")
+            }
         }
     }
     

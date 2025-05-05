@@ -19,8 +19,8 @@ struct UserProfile: Codable {
     
     var usesICloudSync: Bool = false
     
-    // PK Model settings
-    var useTwoCompartmentModel: Bool = false // Default to simpler model for performance
+    // PK Model settings - always use the more accurate two-compartment model
+    var useTwoCompartmentModel: Bool = true
     
     // Computed property for body surface area (DuBois formula)
     var bodySurfaceArea: Double? {

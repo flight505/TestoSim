@@ -133,22 +133,23 @@ struct ProfileView: View {
                 
                 Toggle("Use iCloud Sync", isOn: $dataStore.profile.usesICloudSync)
                 
-                Toggle(isOn: $dataStore.profile.useTwoCompartmentModel) {
-                    HStack {
-                        Text("Two-Compartment Model")
-                        Button {
-                            showingModelInfo = true
-                        } label: {
-                            Image(systemName: "info.circle")
-                                .foregroundColor(.blue)
-                        }
-                        .buttonStyle(BorderlessButtonStyle())
+                HStack {
+                    Text("Advanced PK Model")
+                    Spacer()
+                    Text("Enabled")
+                        .foregroundColor(.secondary)
+                    Button {
+                        showingModelInfo = true
+                    } label: {
+                        Image(systemName: "info.circle")
+                            .foregroundColor(.blue)
                     }
+                    .buttonStyle(BorderlessButtonStyle())
                 }
                 .alert("Advanced PK Model", isPresented: $showingModelInfo) {
                     Button("OK", role: .cancel) { }
                 } message: {
-                    Text("The two-compartment model provides more accurate concentration predictions, especially for long-acting compounds, but requires more processing power. Turn this off on older devices if you experience lag.")
+                    Text("The app uses a two-compartment pharmacokinetic model that provides accurate concentration predictions, especially for long-acting compounds. Modern devices can easily handle this advanced calculation model.")
                 }
             }
             

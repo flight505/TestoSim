@@ -26,8 +26,8 @@ class AppDataStore: ObservableObject {
     // Notification manager
     private let notificationManager = NotificationManager.shared
     
-    // Add PKModel instance
-    private let pkModel = PKModel(useTwoCompartmentModel: false)
+    // Add PKModel instance - always use two-compartment model
+    private let pkModel = PKModel(useTwoCompartmentModel: true)
     
     let simulationDurationDays: Double = 90.0
     
@@ -344,8 +344,18 @@ class AppDataStore: ObservableObject {
     }
     
     func selectProtocol(id: UUID) {
-        selectedProtocolID = id
-        recalcSimulation()
+        // Clear previous selection if different
+        if selectedProtocolID != id {
+            selectedProtocolID = id
+            
+            // Always run simulation when protocol is selected
+            simulateProtocol(id: id)
+        } else {
+            // Even if same protocol, ensure we have simulation data
+            if simulationData.isEmpty {
+                simulateProtocol(id: id)
+            }
+        }
     }
     
     func recalcSimulation() {
@@ -421,11 +431,21 @@ class AppDataStore: ObservableObject {
             route = .intramuscular
         }
         
-        // Get all injection dates up to the target date
+        // We want to show expected concentrations even for future protocols
+        // So for dates before protocol starts, we'll return 0
+        // But we'll still calculate properly for the simulation curve
+        
+        // Get all injection dates from protocol start date up to target date
+        // This ensures we get injections that happen exactly on target date
         let injectionDates = injectionProtocol.injectionDates(
-            from: injectionProtocol.startDate, // Use protocol start date, not 90 days before
+            from: injectionProtocol.startDate,
             upto: targetDate
         )
+        
+        // If target date is before protocol starts, return 0
+        if targetDate < injectionProtocol.startDate {
+            return 0
+        }
         
         // Use the PKModel to calculate concentrations
         let concentrations = pkModel.protocolConcentrations(
@@ -498,28 +518,37 @@ class AppDataStore: ObservableObject {
         
         // Check if we have a valid compound based on protocol type
         let hasValidCompound: Bool
+        var compound: Compound?
+        var dose: Double = protocolToCalibrate.doseMg
         
         switch protocolToCalibrate.protocolType {
         case .compound:
             hasValidCompound = protocolToCalibrate.compoundID != nil && 
                               compoundLibrary.compound(withID: protocolToCalibrate.compoundID!) != nil
+            compound = protocolToCalibrate.compoundID != nil ? compoundLibrary.compound(withID: protocolToCalibrate.compoundID!) : nil
+            
         case .blend:
-            hasValidCompound = protocolToCalibrate.blendID != nil && 
-                              compoundLibrary.blend(withID: protocolToCalibrate.blendID!) != nil
+            if let blendID = protocolToCalibrate.blendID,
+               let blend = compoundLibrary.blend(withID: blendID),
+               let mainComponent = blend.resolvedComponents(using: compoundLibrary).first {
+                
+                hasValidCompound = true
+                compound = mainComponent.compound
+                // Adjust dose for the main component in the blend
+                dose = mainComponent.mgPerML * protocolToCalibrate.doseMg / blend.totalConcentration
+            } else {
+                hasValidCompound = false
+            }
         }
         
         // Make sure we have a valid compound
-        guard hasValidCompound else {
+        guard hasValidCompound, let compound = compound else {
             // Fall back to simple calibration if needed
             calibrateProtocol(protocolToCalibrate)
             return
         }
         
-        // Skip remaining code in calibrateProtocolWithBayesian as it's not needed for now
-        // We can restore it later when we need to implement Bayesian calibration
-        
         // Convert blood samples to PKModel.SamplePoint format
-        /*
         let samplePoints = protocolToCalibrate.bloodSamples.map { 
             PKModel.SamplePoint(timestamp: $0.date, labValue: $0.value)
         }
@@ -534,13 +563,22 @@ class AppDataStore: ObservableObject {
         let endDate = protocolToCalibrate.bloodSamples.map { $0.date }.max() ?? Date()
         let injectionDates = protocolToCalibrate.injectionDates(from: startDate, upto: endDate)
         
+        // Determine the route
+        let route: Compound.Route = {
+            if let routeString = protocolToCalibrate.selectedRoute,
+               let selectedRoute = Compound.Route(rawValue: routeString) {
+                return selectedRoute
+            }
+            return .intramuscular // Default to IM if not specified
+        }()
+        
         // Perform Bayesian calibration
         if let calibrationResult = pkModel.bayesianCalibration(
             samples: samplePoints,
             injectionDates: injectionDates,
             compound: compound,
-            dose: protocolToCalibrate.doseMg,
-            route: .intramuscular, // Default to IM for now
+            dose: dose,
+            route: route,
             weight: profile.weight ?? 70.0
         ) {
             // For now, just use the calibration results to adjust the global calibration factor
@@ -583,7 +621,6 @@ class AppDataStore: ObservableObject {
             // Fall back to simple calibration if Bayesian method fails
             calibrateProtocol(protocolToCalibrate)
         }
-        */
     }
     
     func formatValue(_ value: Double, unit: String) -> String {
@@ -923,7 +960,7 @@ class AppDataStore: ObservableObject {
     
     // Add a new method to simplify access to the model
     private func createPKModel() -> PKModel {
-        return PKModel(useTwoCompartmentModel: profile.useTwoCompartmentModel)
+        return PKModel(useTwoCompartmentModel: true)
     }
     
     // Update the existing simulateProtocol method to use the two-compartment model setting
@@ -949,29 +986,37 @@ class AppDataStore: ObservableObject {
         let now = Date()
         let calendar = Calendar.current
         
-        // For better visualization, generate data points from 1 week before first dose
-        // until 3 dosing intervals after the most recent planned dose
-        let startDate = calendar.date(byAdding: .day, value: -7, to: treatmentProtocol.startDate) ?? treatmentProtocol.startDate
+        // Adjust simulation dates to always show a meaningful timeline
+        // If protocol starts in the future, show from 7 days before start date
+        // If protocol started in the past, show from 7 days before now or protocol start, whichever is earlier
+        let simulationStartDate: Date
+        let daysBeforeStart = -7
         
-        // Calculate the projected last date based on today + 30 days or at least 30 days from protocol start
-        let projectedEndDate: Date
         if treatmentProtocol.startDate > now {
-            // If protocol starts in the future, show at least 30 days from start
-            projectedEndDate = calendar.date(byAdding: .day, value: 60, to: treatmentProtocol.startDate) ?? now
+            // Future protocol - start simulation a week before protocol start
+            simulationStartDate = calendar.date(byAdding: .day, value: daysBeforeStart, to: treatmentProtocol.startDate) ?? treatmentProtocol.startDate
         } else {
-            // Otherwise show 30 days from today
-            projectedEndDate = calendar.date(byAdding: .day, value: 30, to: now) ?? now
+            // Protocol already started - show from a week before now or protocol start, whichever is earlier
+            let aWeekBeforeNow = calendar.date(byAdding: .day, value: daysBeforeStart, to: now) ?? now
+            simulationStartDate = min(aWeekBeforeNow, treatmentProtocol.startDate)
         }
+        
+        // Always show at least 90 days from protocol start for future visibility
+        let minEndDate = calendar.date(byAdding: .day, value: 90, to: treatmentProtocol.startDate) ?? now
+        // Also ensure we see at least 30 days from now for current visibility
+        let thirtyDaysFromNow = calendar.date(byAdding: .day, value: 30, to: now) ?? now
+        // Use the later of these two dates to ensure sufficient future visibility
+        let projectedEndDate = max(minEndDate, thirtyDaysFromNow)
         
         // Generate simulation dates
         let simulationDates = generateSimulationDates(
-            startDate: startDate,
+            startDate: simulationStartDate,
             endDate: projectedEndDate,
             interval: max(0.25, treatmentProtocol.frequencyDays / 16.0) // 16 points per interval for smoother curve
         )
         
-        // Generate injection dates - use protocol start date for beginning
-        // This ensures we get injections even for future protocols
+        // Generate injection dates - ALWAYS use protocol start date for beginning
+        // regardless of whether it's in the future or past
         let injectionDates = treatmentProtocol.injectionDates(from: treatmentProtocol.startDate, upto: projectedEndDate)
         
         // Weight for allometric scaling
@@ -1007,17 +1052,23 @@ class AppDataStore: ObservableObject {
             }
         }
         
-        // Make sure we have compounds to simulate
-        guard !compounds.isEmpty else {
+        // Skip if no compounds
+        if compounds.isEmpty {
+            print("No compounds found for protocol. Check protocol configuration.")
             simulationData = []
             return
         }
         
-        // Get the route
-        let routeStr = treatmentProtocol.selectedRoute ?? Compound.Route.intramuscular.rawValue
-        let route = Compound.Route(rawValue: routeStr) ?? .intramuscular
+        // Get the route (default to intramuscular if not specified)
+        let route: Compound.Route
+        if let routeString = treatmentProtocol.selectedRoute,
+           let selectedRoute = Compound.Route(rawValue: routeString) {
+            route = selectedRoute
+        } else {
+            route = .intramuscular
+        }
         
-        // Calculate the concentrations at each time point
+        // Calculate concentrations
         let concentrations = pkModel.protocolConcentrations(
             at: simulationDates,
             injectionDates: injectionDates,
@@ -1027,9 +1078,20 @@ class AppDataStore: ObservableObject {
             calibrationFactor: profile.calibrationFactor
         )
         
-        // Convert to DataPoint array
+        // Convert to DataPoints
         simulationData = zip(simulationDates, concentrations).map {
             DataPoint(time: $0, level: $1)
+        }
+        
+        // Log for debugging
+        print("Simulated protocol: \(treatmentProtocol.name)")
+        print("  - Start date: \(treatmentProtocol.startDate)")
+        print("  - Simulation date range: \(simulationStartDate) to \(projectedEndDate)")
+        print("  - Found \(injectionDates.count) injection dates")
+        print("  - Generated \(simulationData.count) data points")
+        if let first = simulationData.first, let last = simulationData.last {
+            print("  - First point: \(first.time) = \(first.level)")
+            print("  - Last point: \(last.time) = \(last.level)")
         }
     }
     

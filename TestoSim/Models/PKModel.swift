@@ -13,17 +13,19 @@ struct PKModel {
     
     // MARK: - Properties
     
-    /// Whether to use the two-compartment model (more accurate but more computationally intensive)
-    var useTwoCompartmentModel: Bool
+    /// Using two-compartment model (more accurate but more computationally intensive)
+    /// Modern devices can handle this computation without issues
+    var useTwoCompartmentModel: Bool = true
     
-    /// Fixed compartment transfer rates if using two-compartment model (from guide)
+    /// Fixed compartment transfer rates for two-compartment model
     let k12: Double = 0.3 // d⁻¹
     let k21: Double = 0.15 // d⁻¹
     
     // MARK: - Initialization
     
-    init(useTwoCompartmentModel: Bool = false) {
-        self.useTwoCompartmentModel = useTwoCompartmentModel
+    init(useTwoCompartmentModel: Bool = true) {
+        // Always use two-compartment model, parameter kept for backward compatibility
+        self.useTwoCompartmentModel = true
     }
     
     // MARK: - Concentration Calculations
@@ -68,35 +70,24 @@ struct PKModel {
         // Calculate volume of distribution and clearance with allometric scaling
         let vd = PKModel.defaultVolumeOfDistribution70kg * pow(weight / 70.0, 1.0)
         
-        // One-compartment model with first-order absorption (standard PK formula)
-        let scaledDose = dose * bioavailability
-        let factor = (scaledDose * absorptionRateKa) / (vd * (absorptionRateKa - ke))
+        // Calculate alpha and beta for two-compartment model
+        // These are the hybrid rate constants derived from k12, k21, and ke
+        let beta = 0.5 * ((k12 + k21 + ke) - sqrt(pow(k12 + k21 + ke, 2) - 4 * k21 * ke))
+        let alpha = (k21 * ke) / beta
         
-        if useTwoCompartmentModel {
-            // Calculate alpha and beta for two-compartment model
-            // These are the hybrid rate constants derived from k12, k21, and ke
-            let beta = 0.5 * ((k12 + k21 + ke) - sqrt(pow(k12 + k21 + ke, 2) - 4 * k21 * ke))
-            let alpha = (k21 * ke) / beta
-            
-            // Two-compartment model with first-order absorption
-            let term1 = absorptionRateKa / ((absorptionRateKa - alpha) * (absorptionRateKa - beta))
-            let term2 = absorptionRateKa / ((alpha - absorptionRateKa) * (alpha - beta))
-            let term3 = absorptionRateKa / ((beta - absorptionRateKa) * (beta - alpha))
-            
-            let result = (scaledDose / vd) * (
-                term1 * exp(-absorptionRateKa * time) +
-                term2 * exp(-alpha * time) +
-                term3 * exp(-beta * time)
-            )
-            
-            return result * calibrationFactor
-        } else {
-            // One-compartment model with first-order absorption (standard PK formula)
-            // C(t) = (F·D·ka)/(Vd·(ka-ke))·(e^(-ke·t)-e^(-ka·t))
-            let result = factor * (exp(-ke * time) - exp(-absorptionRateKa * time))
-            
-            return result * calibrationFactor
-        }
+        // Two-compartment model with first-order absorption
+        let scaledDose = dose * bioavailability
+        let term1 = absorptionRateKa / ((absorptionRateKa - alpha) * (absorptionRateKa - beta))
+        let term2 = absorptionRateKa / ((alpha - absorptionRateKa) * (alpha - beta))
+        let term3 = absorptionRateKa / ((beta - absorptionRateKa) * (beta - alpha))
+        
+        let result = (scaledDose / vd) * (
+            term1 * exp(-absorptionRateKa * time) +
+            term2 * exp(-alpha * time) +
+            term3 * exp(-beta * time)
+        )
+        
+        return result * calibrationFactor
     }
     
     /// Calculate concentration for a bolus injection (immediate absorption)
@@ -468,46 +459,40 @@ struct PKModel {
             return 0
         }
         
-        if useTwoCompartmentModel {
-            // For two-compartment model, need numerical approach to find Tp
-            // This is a simplified approximation - would use a more sophisticated
-            // numerical method in a full implementation
+        // For two-compartment model, need numerical approach to find Tp
+        // This is a simplified approximation - would use a more sophisticated
+        // numerical method in a full implementation
+        
+        // Calculate alpha and beta for two-compartment model
+        let beta = 0.5 * ((k12 + k21 + ke) - sqrt(pow(k12 + k21 + ke, 2) - 4 * k21 * ke))
+        let alpha = (k21 * ke) / beta
+        
+        // Approximate Tp using numerical search (rough estimate)
+        var bestTime = 0.0
+        var maxConc = 0.0
+        
+        // Search from 0 to about 5 half-lives with small steps
+        let searchEnd = 5 * halfLifeDays
+        let step = halfLifeDays / 50.0
+        
+        for t in stride(from: 0, through: searchEnd, by: step) {
+            let conc = concentration(
+                at: t,
+                dose: dose,
+                halfLifeDays: halfLifeDays,
+                absorptionRateKa: absorptionRateKa,
+                bioavailability: bioavailability,
+                weight: weight,
+                calibrationFactor: calibrationFactor
+            )
             
-            // Calculate alpha and beta for two-compartment model
-            let beta = 0.5 * ((k12 + k21 + ke) - sqrt(pow(k12 + k21 + ke, 2) - 4 * k21 * ke))
-            let alpha = (k21 * ke) / beta
-            
-            // Approximate Tp using numerical search (rough estimate)
-            var bestTime = 0.0
-            var maxConc = 0.0
-            
-            // Search from 0 to about 5 half-lives with small steps
-            let searchEnd = 5 * halfLifeDays
-            let step = halfLifeDays / 50.0
-            
-            for t in stride(from: 0, through: searchEnd, by: step) {
-                let conc = concentration(
-                    at: t,
-                    dose: dose,
-                    halfLifeDays: halfLifeDays,
-                    absorptionRateKa: absorptionRateKa,
-                    bioavailability: bioavailability,
-                    weight: weight,
-                    calibrationFactor: calibrationFactor
-                )
-                
-                if conc > maxConc {
-                    maxConc = conc
-                    bestTime = t
-                }
+            if conc > maxConc {
+                maxConc = conc
+                bestTime = t
             }
-            
-            return bestTime
-        } else {
-            // One-compartment model with analytical solution
-            let tp = log(absorptionRateKa / ke) / (absorptionRateKa - ke)
-            return max(0, tp) // Ensure non-negative
         }
+        
+        return bestTime
     }
     
     /// Calculate the maximum concentration for a given dose
