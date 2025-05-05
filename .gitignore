@@ -105,3 +105,6 @@ memory.jsonl
 ai_docs/
 specs/
 
+# API Keys
+TestoSim/Config.xcconfig
+

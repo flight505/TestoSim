@@ -11,7 +11,20 @@ class OpenAIService {
     private let apiEndpoint = "https://api.openai.com/v1/chat/completions"
     
     /// Test project API key with $20 spending limit (for test users)
-    private let testApiKey = "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"
+    private var testApiKey: String {
+        // Read the API key from Info.plist
+        if let key = Bundle.main.object(forInfoDictionaryKey: "OPENAI_API_KEY") as? String {
+            if key.hasPrefix("_") {
+                // This is the sample placeholder value, log an error
+                print("WARNING: Using placeholder API key. Please provide a valid API key in Config.xcconfig.")
+                return ""
+            }
+            return key
+        }
+        // Fallback if key not found
+        print("ERROR: API key not found in Info.plist.")
+        return ""
+    }
     
     /// Flag to determine if using test API key
     @Published private(set) var isUsingTestKey = false
