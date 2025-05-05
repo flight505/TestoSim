@@ -217,7 +217,7 @@ class AIInsightsGenerator: ObservableObject {
     ) -> Insights {
         // Extract protocol details
         let protocolType = treatmentProtocol.protocolType
-        var protocolName = treatmentProtocol.name
+        let protocolName = treatmentProtocol.name
         var compoundOrBlendName = "Unknown"
         
         // Determine the compound or blend name
@@ -354,8 +354,8 @@ class AIInsightsGenerator: ObservableObject {
         
         // Get simulation statistics
         let maxLevel = simulationData.map { $0.level }.max() ?? 0
-        let minLevel = simulationData.map { $0.level }.min() ?? 0
-        let avgLevel = simulationData.map { $0.level }.reduce(0, +) / Double(max(1, simulationData.count))
+        let _ = simulationData.map { $0.level }.min() ?? 0
+        let _ = simulationData.map { $0.level }.reduce(0, +) / Double(max(1, simulationData.count))
         
         // Generate insights for the cycle
         var insights = Insights(

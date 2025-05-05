@@ -240,7 +240,7 @@ class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
             Calendar.current.isDate($0.scheduledDate, inSameDayAs: injectionDate)
         }) {
             // Update the record
-            var record = injectionRecords[index]
+            let record = injectionRecords[index]
             
             // Determine adherence status
             let hoursBetween = injectionDate.distance(to: now) / 3600

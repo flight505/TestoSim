@@ -63,15 +63,16 @@ struct AIInsightsView: View {
         }
         .onAppear {
             generateInsights()
+            // Set up error handling monitoring
+            updateErrorMessage()
         }
         .sheet(isPresented: $showSettings) {
             AISettingsView(insightsGenerator: insightsGenerator)
         }
-        .onChange(of: insightsGenerator.error) { newError in
-            if let error = newError {
-                errorMessage = error.localizedDescription
-            } else {
-                errorMessage = nil
+        // Use a task to monitor error state changes instead of onChange
+        .task {
+            for await _ in insightsGenerator.$error.values {
+                updateErrorMessage()
             }
         }
     }
@@ -389,6 +390,14 @@ struct AIInsightsView: View {
             return .purple
         }
     }
+    
+    private func updateErrorMessage() {
+        if let error = insightsGenerator.error {
+            errorMessage = error.localizedDescription
+        } else {
+            errorMessage = nil
+        }
+    }
 }
 
 // MARK: - AISettingsView
@@ -413,7 +422,7 @@ struct AISettingsView: View {
             Form {
                 Section(header: Text("API Key Options")) {
                     Toggle("Use Free Test API Key", isOn: $useTestKey)
-                        .onChange(of: useTestKey) { newValue in
+                        .onChange(of: useTestKey) { oldValue, newValue in
                             OpenAIService.shared.toggleTestApiKey(newValue)
                             insightsGenerator.refreshAfterAPIKeyChange()
                         }

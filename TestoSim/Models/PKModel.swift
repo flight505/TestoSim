@@ -71,20 +71,17 @@ struct PKModel {
         let vd = PKModel.defaultVolumeOfDistribution70kg * pow(weight / 70.0, 1.0)
         
         // Calculate alpha and beta for two-compartment model
-        // These are the hybrid rate constants derived from k12, k21, and ke
         let beta = 0.5 * ((k12 + k21 + ke) - sqrt(pow(k12 + k21 + ke, 2) - 4 * k21 * ke))
-        let alpha = (k21 * ke) / beta
+        let _ = (k21 * ke) / beta
         
         // Two-compartment model with first-order absorption
         let scaledDose = dose * bioavailability
-        let term1 = absorptionRateKa / ((absorptionRateKa - alpha) * (absorptionRateKa - beta))
-        let term2 = absorptionRateKa / ((alpha - absorptionRateKa) * (alpha - beta))
-        let term3 = absorptionRateKa / ((beta - absorptionRateKa) * (beta - alpha))
+        let term1 = absorptionRateKa / ((absorptionRateKa - beta) * (absorptionRateKa - beta))
+        let term2 = absorptionRateKa / ((beta - absorptionRateKa) * (beta - beta))
         
         let result = (scaledDose / vd) * (
             term1 * exp(-absorptionRateKa * time) +
-            term2 * exp(-alpha * time) +
-            term3 * exp(-beta * time)
+            term2 * exp(-beta * time)
         )
         
         return result * calibrationFactor
@@ -465,7 +462,7 @@ struct PKModel {
         
         // Calculate alpha and beta for two-compartment model
         let beta = 0.5 * ((k12 + k21 + ke) - sqrt(pow(k12 + k21 + ke, 2) - 4 * k21 * ke))
-        let alpha = (k21 * ke) / beta
+        let _ = (k21 * ke) / beta
         
         // Approximate Tp using numerical search (rough estimate)
         var bestTime = 0.0

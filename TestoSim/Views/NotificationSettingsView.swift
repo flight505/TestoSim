@@ -22,13 +22,13 @@ struct NotificationSettingsView: View {
             Form {
                 Section(header: Text("Notifications")) {
                     Toggle("Enable Injection Reminders", isOn: $notificationsEnabled)
-                        .onChange(of: notificationsEnabled) { newValue in
+                        .onChange(of: notificationsEnabled) { oldValue, newValue in
                             dataStore.toggleNotifications(enabled: newValue)
                         }
                     
                     if notificationsEnabled {
                         Toggle("Play Sound", isOn: $soundEnabled)
-                            .onChange(of: soundEnabled) { newValue in
+                            .onChange(of: soundEnabled) { oldValue, newValue in
                                 dataStore.setNotificationSound(enabled: newValue)
                             }
                         
@@ -38,7 +38,7 @@ struct NotificationSettingsView: View {
                                     .tag(leadTime)
                             }
                         }
-                        .onChange(of: selectedLeadTime) { newValue in
+                        .onChange(of: selectedLeadTime) { oldValue, newValue in
                             dataStore.setNotificationLeadTime(newValue)
                         }
                     }

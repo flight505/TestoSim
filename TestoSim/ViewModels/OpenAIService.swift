@@ -1,7 +1,8 @@
 import Foundation
+import SwiftUI
 
 /// Service for handling OpenAI API requests
-class OpenAIService {
+class OpenAIService: ObservableObject {
     // MARK: - Properties
     
     /// Singleton instance

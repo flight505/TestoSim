@@ -55,7 +55,7 @@ struct ProtocolFormView: View {
                         Text("Blend").tag(ProtocolType.blend)
                     }
                     .pickerStyle(SegmentedPickerStyle())
-                    .onChange(of: protocolType) { _ in
+                    .onChange(of: protocolType) { oldValue, newValue in
                         // Reset selection when changing type
                         if protocolType != .compound {
                             selectedCompoundID = nil
@@ -97,7 +97,7 @@ struct ProtocolFormView: View {
                                         Text(route.displayName).tag(route)
                                     }
                                 }
-                                .onChange(of: selectedRoute) { newRoute in
+                                .onChange(of: selectedRoute) { oldValue, newRoute in
                                     // Ensure the route is valid for this compound
                                     if let compound = dataStore.compoundLibrary.compound(withID: selectedCompoundID!),
                                        (compound.defaultBioavailability[newRoute] ?? 0) <= 0 {
