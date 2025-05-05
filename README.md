@@ -127,3 +127,21 @@ TestoSim uses a comprehensive system for selecting compounds:
 - Compounds are modeled with class types, esters, half-lives, and route-specific parameters
 - Complete absorption and bioavailability characteristics for each compound and route
 - Accurate simulation of single compounds and complex blends 
+
+## API Key Configuration
+
+The TestoSim app uses OpenAI's API for generating insights about hormone protocols and cycles. The app includes a free test API key with a $20 spending limit for all users.
+
+### For Developers
+
+When cloning this repository for development:
+
+1. The app uses a configuration file (`Config.xcconfig`) to store API keys
+2. A sample configuration file (`Config-Sample.xcconfig`) is included in the repository
+3. On first build, the sample file will be copied to `Config.xcconfig` if it doesn't exist
+4. You can optionally replace the placeholder value with your own OpenAI API key
+
+### Security Notes
+
+- The `Config.xcconfig` file is excluded from git in `.gitignore`
+- Users can toggle between using their own API key or the test API key in the AI settings 

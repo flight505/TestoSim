@@ -10,15 +10,40 @@ class OpenAIService {
     /// OpenAI API endpoint
     private let apiEndpoint = "https://api.openai.com/v1/chat/completions"
     
+    /// Test project API key with $20 spending limit (for test users)
+    private var testApiKey: String {
+        // Read the API key from Info.plist
+        if let key = Bundle.main.object(forInfoDictionaryKey: "OPENAI_API_KEY") as? String {
+            if key.hasPrefix("_") {
+                // This is the sample placeholder value, log an error
+                print("Warning: Using placeholder API key. Please update Config.xcconfig with a real API key.")
+                return ""
+            }
+            return key
+        }
+        return ""
+    }
+    
+    /// Flag to determine if using test API key
+    @Published private(set) var isUsingTestKey = false
+    
     /// OpenAI API key
     private var apiKey: String {
-        // Get API key from UserDefaults or environment
-        return UserDefaults.standard.string(forKey: "openai_api_key") ?? 
-               ProcessInfo.processInfo.environment["OPENAI_API_KEY"] ?? ""
+        // First check if we should use the test key
+        if UserDefaults.standard.bool(forKey: "use_test_api_key") {
+            isUsingTestKey = true
+            if !testApiKey.isEmpty {
+                return testApiKey
+            }
+        }
+        
+        // Otherwise use the user's API key from UserDefaults
+        isUsingTestKey = false
+        return UserDefaults.standard.string(forKey: "openai_api_key") ?? ""
     }
     
     /// The model to use for generating insights
-    private let model = "gpt-4" // Can be changed to "gpt-3.5-turbo" for lower cost
+    private let model = "gpt-4o-mini" // Using mini version for cost efficiency
     
     // MARK: - Initialization
     
