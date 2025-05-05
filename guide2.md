@@ -98,7 +98,7 @@ The following backend features have been implemented but need UI components:
    * ✅ Fixed parameter naming in DataPoint references (time/level instead of date/value)
    * ✅ Updated all references to match the new parameter names
    * ✅ Resolved "unable to type-check this expression in reasonable time" error in ProtocolListView by breaking down complex views
-   * ⚠️ Temporarily disabled TestosteroneChart in ProtocolDetailView with a placeholder until compiler issues are resolved
+   * ✅ Re-enabled TestosteroneChart in ProtocolDetailView after resolving compiler issues
    * ✅ Build is now successful and app runs cleanly
 
 6. ✅ Re-enable CloudKit integration for data persistence
