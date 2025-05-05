@@ -12,11 +12,13 @@ class OpenAIService {
     
     /// Test project API key with $20 spending limit (for test users)
     private var testApiKey: String {
-        // Read the API key from Info.plist
-        if let key = Bundle.main.object(forInfoDictionaryKey: "OPENAI_API_KEY") as? String {
-            if key.hasPrefix("_") {
-                // This is the sample placeholder value, log an error
-                print("Warning: Using placeholder API key. Please update Config.xcconfig with a real API key.")
+        // Read the API key from Config.plist
+        if let path = Bundle.main.path(forResource: "Config", ofType: "plist"),
+           let dict = NSDictionary(contentsOfFile: path),
+           let key = dict["OPENAI_API_KEY"] as? String {
+            if key == "PLACEHOLDER_API_KEY" {
+                // This is the placeholder value, log an error
+                print("Warning: Using placeholder API key. Please update Config.plist with a real API key.")
                 return ""
             }
             return key
@@ -285,7 +287,7 @@ class OpenAIService {
                         - \(compoundObj.commonName) \(compoundObj.ester ?? "")
                           Dose: \(compound.doseMg) mg
                           Frequency: Every \(compound.frequencyDays) days
-                          Route: \(compound.selectedRoute ?? "intramuscular")
+                          Route: intramuscular
                         """
                     }
                 }
@@ -301,7 +303,7 @@ class OpenAIService {
                         - \(blendObj.name)
                           Dose: \(blend.doseMg) mg
                           Frequency: Every \(blend.frequencyDays) days
-                          Route: \(blend.selectedRoute ?? "intramuscular")
+                          Route: intramuscular
                         """
                     }
                 }
