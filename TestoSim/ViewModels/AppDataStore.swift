@@ -52,6 +52,16 @@ class AppDataStore: ObservableObject {
                 self.profile = loadedProfile
             } else {
                 self.profile = AppDataStore.createDefaultProfile()
+                
+                // Save the default profile to Core Data
+                let context = coreDataManager.persistentContainer.viewContext
+                _ = self.profile.saveToCD(context: context)
+                
+                do {
+                    try context.save()
+                } catch {
+                    print("Error saving default profile to Core Data: \(error)")
+                }
             }
             
             // Load cycles from Core Data if migrated
@@ -63,12 +73,24 @@ class AppDataStore: ObservableObject {
                 self.profile = decodedProfile
                 
                 // Trigger migration to Core Data if needed
-                if !UserDefaults.standard.bool(forKey: "migrated") {
-                    coreDataManager.migrateUserProfileFromJSON()
-                }
+                coreDataManager.migrateUserProfileFromJSON()
+                UserDefaults.standard.set(true, forKey: "migrated")
             } else {
                 // Create default profile with a sample protocol
                 self.profile = AppDataStore.createDefaultProfile()
+                
+                // Set the migrated flag to true
+                UserDefaults.standard.set(true, forKey: "migrated")
+                
+                // Save the default profile to Core Data
+                let context = coreDataManager.persistentContainer.viewContext
+                _ = self.profile.saveToCD(context: context)
+                
+                do {
+                    try context.save()
+                } catch {
+                    print("Error saving default profile to Core Data: \(error)")
+                }
             }
         }
         
@@ -338,11 +360,15 @@ class AppDataStore: ObservableObject {
     
     func generateSimulationData(for injectionProtocol: InjectionProtocol) -> [DataPoint] {
         let startDate = injectionProtocol.startDate
+        // Project at least 90 days of data
         let endDate = startDate.addingTimeInterval(simulationDurationDays * 24 * 3600)
         let stepInterval: TimeInterval = 6 * 3600 // 6-hour intervals
         
         var dataPoints: [DataPoint] = []
-        var currentDate = startDate
+        
+        // Start simulation from a week before the protocol start date
+        let simulationStartDate = Calendar.current.date(byAdding: .day, value: -7, to: startDate) ?? startDate
+        var currentDate = simulationStartDate
         
         while currentDate <= endDate {
             let level = calculateLevel(at: currentDate, for: injectionProtocol, using: profile.calibrationFactor)
@@ -397,7 +423,7 @@ class AppDataStore: ObservableObject {
         
         // Get all injection dates up to the target date
         let injectionDates = injectionProtocol.injectionDates(
-            from: injectionProtocol.startDate.addingTimeInterval(-90 * 24 * 3600), // Include 90 days before to catch buildup
+            from: injectionProtocol.startDate, // Use protocol start date, not 90 days before
             upto: targetDate
         )
         
@@ -846,8 +872,22 @@ class AppDataStore: ObservableObject {
             } else if treatmentProtocol.protocolType == .blend, let blendID = treatmentProtocol.blendID {
                 if let blend = compoundLibrary.blends.first(where: { $0.id == blendID }) {
                     compounds = blend.components.map { component in
-                        (component.compound, treatmentProtocol.doseMg * (component.percentageAmount / 100.0))
-                    }
+                        if let compound = compoundLibrary.compound(withID: component.compoundID) {
+                            return (compound, treatmentProtocol.doseMg * (component.mgPerML / blend.totalConcentration))
+                        } else {
+                            return nil
+                        }
+                    }.compactMap { $0 }
+                }
+            } else {
+                // Legacy protocol with testosterone ester - convert to compound
+                // Try to find a matching testosterone compound based on ester name
+                if let esterName = treatmentProtocol.notes?.contains("ester:") == true ? 
+                    treatmentProtocol.notes?.components(separatedBy: "ester:").last?.trimmingCharacters(in: .whitespacesAndNewlines) : nil,
+                   let compound = compoundLibrary.compounds.first(where: { 
+                       $0.classType == .testosterone && $0.ester?.lowercased() == esterName.lowercased() 
+                   }) {
+                    compounds = [(compound, treatmentProtocol.doseMg)]
                 }
             }
             
@@ -855,7 +895,7 @@ class AppDataStore: ObservableObject {
             guard !compounds.isEmpty else { continue }
             
             // Generate injection dates
-            let injectionDates = treatmentProtocol.generateInjectionDates(endDate: endDate)
+            let injectionDates = treatmentProtocol.injectionDates(from: startDate, upto: endDate)
             
             // Calculate concentrations
             let concentrations = pkModel.protocolConcentrations(
@@ -913,8 +953,15 @@ class AppDataStore: ObservableObject {
         // until 3 dosing intervals after the most recent planned dose
         let startDate = calendar.date(byAdding: .day, value: -7, to: treatmentProtocol.startDate) ?? treatmentProtocol.startDate
         
-        // Calculate the projected last date based on today + 30 days
-        let projectedEndDate = calendar.date(byAdding: .day, value: 30, to: now) ?? now
+        // Calculate the projected last date based on today + 30 days or at least 30 days from protocol start
+        let projectedEndDate: Date
+        if treatmentProtocol.startDate > now {
+            // If protocol starts in the future, show at least 30 days from start
+            projectedEndDate = calendar.date(byAdding: .day, value: 60, to: treatmentProtocol.startDate) ?? now
+        } else {
+            // Otherwise show 30 days from today
+            projectedEndDate = calendar.date(byAdding: .day, value: 30, to: now) ?? now
+        }
         
         // Generate simulation dates
         let simulationDates = generateSimulationDates(
@@ -923,8 +970,9 @@ class AppDataStore: ObservableObject {
             interval: max(0.25, treatmentProtocol.frequencyDays / 16.0) // 16 points per interval for smoother curve
         )
         
-        // Generate injection dates
-        let injectionDates = treatmentProtocol.generateInjectionDates(endDate: projectedEndDate)
+        // Generate injection dates - use protocol start date for beginning
+        // This ensures we get injections even for future protocols
+        let injectionDates = treatmentProtocol.injectionDates(from: treatmentProtocol.startDate, upto: projectedEndDate)
         
         // Weight for allometric scaling
         let weight = profile.weight ?? 70.0 // Default to 70kg if not specified
@@ -940,12 +988,21 @@ class AppDataStore: ObservableObject {
             if let blend = compoundLibrary.blends.first(where: { $0.id == blendID }) {
                 // Get all compounds from the blend with their proportional doses
                 compounds = blend.components.map { component in
-                    (component.compound, treatmentProtocol.doseMg * (component.percentageAmount / 100.0))
-                }
+                    if let compound = compoundLibrary.compound(withID: component.compoundID) {
+                        return (compound, treatmentProtocol.doseMg * (component.mgPerML / blend.totalConcentration))
+                    } else {
+                        return nil
+                    }
+                }.compactMap { $0 }
             }
         } else {
             // Legacy protocol with testosterone ester - convert to compound
-            if let compound = compoundLibrary.compoundFromEster(treatmentProtocol.ester ?? "") {
+            // Try to find a matching testosterone compound based on ester name
+            if let esterName = treatmentProtocol.notes?.contains("ester:") == true ? 
+                treatmentProtocol.notes?.components(separatedBy: "ester:").last?.trimmingCharacters(in: .whitespacesAndNewlines) : nil,
+               let compound = compoundLibrary.compounds.first(where: { 
+                   $0.classType == .testosterone && $0.ester?.lowercased() == esterName.lowercased() 
+               }) {
                 compounds = [(compound, treatmentProtocol.doseMg)]
             }
         }

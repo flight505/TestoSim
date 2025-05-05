@@ -11,37 +11,28 @@ struct CyclePlannerView: View {
     @State private var weekViewWidth: CGFloat = 70
     
     var body: some View {
-        NavigationView {
-            VStack {
-                if dataStore.cycles.isEmpty {
-                    emptyCyclesView
-                } else {
-                    cycleListView
+        VStack {
+            if dataStore.cycles.isEmpty {
+                emptyCyclesView
+            } else {
+                cycleListView
+            }
+        }
+        .navigationTitle("Cycle Planner")
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button(action: {
+                    isPresentingNewCycleForm = true
+                }) {
+                    Label("Add Cycle", systemImage: "plus")
                 }
             }
-            .navigationTitle("Cycle Planner")
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button(action: {
-                        isPresentingNewCycleForm = true
-                    }) {
-                        Label("Add Cycle", systemImage: "plus")
-                    }
-                }
-            }
-            .sheet(isPresented: $isPresentingNewCycleForm) {
-                CycleFormView(isPresented: $isPresentingNewCycleForm)
-            }
-            .sheet(item: $selectedCycle) { cycle in
-                CycleDetailView(cycle: cycle)
-            }
-            
-            // Detail view placeholder when no cycle is selected
-            if dataStore.selectedCycleID == nil {
-                Text("Select a cycle to view details")
-                    .font(.title2)
-                    .foregroundColor(.secondary)
-            }
+        }
+        .sheet(isPresented: $isPresentingNewCycleForm) {
+            CycleFormView(isPresented: $isPresentingNewCycleForm)
+        }
+        .sheet(item: $selectedCycle) { cycle in
+            CycleDetailView(cycle: cycle)
         }
     }
     
@@ -78,31 +69,51 @@ struct CyclePlannerView: View {
     
     private var cycleListView: some View {
         List {
-            Section(header: Text("My Cycles")) {
-                ForEach(dataStore.cycles) { cycle in
-                    CycleRowView(cycle: cycle)
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            dataStore.selectedCycleID = cycle.id
-                            if dataStore.isCycleSimulationActive == false {
-                                dataStore.simulateCycle(cycle)
-                            }
-                            selectedCycle = cycle
-                        }
-                        .background(
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(dataStore.selectedCycleID == cycle.id ? Color.accentColor.opacity(0.1) : Color.clear)
-                        )
-                }
-                .onDelete { indexSet in
-                    for index in indexSet {
-                        if index < dataStore.cycles.count {
-                            dataStore.deleteCycle(with: dataStore.cycles[index].id)
-                        }
-                    }
-                }
-            }
+            cycleListSection
             
+            simulationResultsSection
+        }
+    }
+    
+    private var cycleListSection: some View {
+        Section(header: Text("My Cycles")) {
+            cycleRows
+        }
+    }
+    
+    private var cycleRows: some View {
+        ForEach(dataStore.cycles) { cycle in
+            cycleRow(for: cycle)
+        }
+        .onDelete(perform: handleDelete)
+    }
+    
+    private func cycleRow(for cycle: Cycle) -> some View {
+        CycleRowView(cycle: cycle)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                dataStore.selectedCycleID = cycle.id
+                if dataStore.isCycleSimulationActive == false {
+                    dataStore.simulateCycle(id: cycle.id)
+                }
+                selectedCycle = cycle
+            }
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(dataStore.selectedCycleID == cycle.id ? Color.accentColor.opacity(0.1) : Color.clear)
+            )
+    }
+    
+    private func handleDelete(at indexSet: IndexSet) {
+        for index in indexSet {
+            if index < dataStore.cycles.count {
+                dataStore.deleteCycle(with: dataStore.cycles[index].id)
+            }
+        }
+    }
+    
+    private var simulationResultsSection: some View {
+        Group {
             if dataStore.isCycleSimulationActive, !dataStore.cycleSimulationData.isEmpty {
                 Section(header: Text("Simulation Results")) {
                     VStack(alignment: .leading) {
