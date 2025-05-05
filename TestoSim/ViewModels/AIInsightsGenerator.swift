@@ -16,17 +16,16 @@ class AIInsightsGenerator: ObservableObject {
     
     // MARK: - Private Properties
     
-    /// API Key for OpenAI services
-    private let apiKey: String
+    /// API Service for OpenAI
+    private let openAIService = OpenAIService.shared
     
     /// Cache to store generated insights for each protocol
     private var insightsCache: [UUID: Insights] = [:]
     
     // MARK: - Initialization
     
-    init(apiKey: String? = nil) {
-        // Use provided key or try to get from environment
-        self.apiKey = apiKey ?? ProcessInfo.processInfo.environment["OPENAI_API_KEY"] ?? ""
+    init() {
+        // Initialization doesn't require anything specific
     }
     
     // MARK: - Public Methods
@@ -54,9 +53,37 @@ class AIInsightsGenerator: ObservableObject {
         isLoading = true
         error = nil
         
-        // In a real implementation, this would make an API call to OpenAI
-        // For now, we'll use a mock implementation that returns predefined insights
-        generateMockInsights(for: treatmentProtocol, profile: profile, simulationData: simulationData, compoundLibrary: compoundLibrary)
+        // Check if OpenAI API key is available
+        if openAIService.hasAPIKey() {
+            // Use OpenAI service for real insights
+            openAIService.generateProtocolInsights(
+                treatmentProtocol: treatmentProtocol,
+                profile: profile,
+                simulationData: simulationData,
+                compoundLibrary: compoundLibrary
+            ) { [weak self] result in
+                DispatchQueue.main.async {
+                    guard let self = self else { return }
+                    
+                    self.isLoading = false
+                    
+                    switch result {
+                    case .success(let insights):
+                        // Cache the insights
+                        self.insightsCache[treatmentProtocol.id] = insights
+                        self.latestInsights = insights
+                        
+                    case .failure(let error):
+                        self.error = error
+                        // Fall back to mock insights if API call fails
+                        self.generateMockInsights(for: treatmentProtocol, profile: profile, simulationData: simulationData, compoundLibrary: compoundLibrary)
+                    }
+                }
+            }
+        } else {
+            // Use mock implementation when API key is not available
+            generateMockInsights(for: treatmentProtocol, profile: profile, simulationData: simulationData, compoundLibrary: compoundLibrary)
+        }
     }
     
     /// Generate insights for a cycle
@@ -82,14 +109,54 @@ class AIInsightsGenerator: ObservableObject {
         isLoading = true
         error = nil
         
-        // In a real implementation, this would make an API call to OpenAI
-        // For now, we'll use a mock implementation that returns predefined insights for cycles
-        generateMockCycleInsights(for: cycle, profile: profile, simulationData: simulationData, compoundLibrary: compoundLibrary)
+        // Check if OpenAI API key is available
+        if openAIService.hasAPIKey() {
+            // Use OpenAI service for real insights
+            openAIService.generateCycleInsights(
+                cycle: cycle,
+                profile: profile,
+                simulationData: simulationData,
+                compoundLibrary: compoundLibrary
+            ) { [weak self] result in
+                DispatchQueue.main.async {
+                    guard let self = self else { return }
+                    
+                    self.isLoading = false
+                    
+                    switch result {
+                    case .success(let insights):
+                        // Cache the insights
+                        self.insightsCache[cycle.id] = insights
+                        self.latestInsights = insights
+                        
+                    case .failure(let error):
+                        self.error = error
+                        // Fall back to mock insights if API call fails
+                        self.generateMockCycleInsights(for: cycle, profile: profile, simulationData: simulationData, compoundLibrary: compoundLibrary)
+                    }
+                }
+            }
+        } else {
+            // Use mock implementation when API key is not available
+            generateMockCycleInsights(for: cycle, profile: profile, simulationData: simulationData, compoundLibrary: compoundLibrary)
+        }
     }
     
     /// Clear all cached insights
     func clearCache() {
         insightsCache.removeAll()
+        latestInsights = nil
+    }
+    
+    /// Refreshes insights after API key change
+    func refreshAfterAPIKeyChange() {
+        // Clear the cache to force a refresh on next request
+        clearCache()
+        
+        // Reset any error state
+        error = nil
+        
+        // Clear the latest insights to prompt a new request
         latestInsights = nil
     }
     

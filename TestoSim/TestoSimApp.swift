@@ -22,6 +22,13 @@ struct TestoSimApp: App {
     
     init() {
         print("TestoSim is starting up...")
+        
+        // Set up default API key settings if not already set
+        if UserDefaults.standard.object(forKey: "use_test_api_key") == nil {
+            // Enable test API key by default for all users
+            UserDefaults.standard.set(true, forKey: "use_test_api_key")
+            print("Default API key settings initialized: Using test key")
+        }
     }
     
     var body: some Scene {

@@ -4,16 +4,34 @@ import SwiftUI
 struct AIInsightsView: View {
     @EnvironmentObject var dataStore: AppDataStore
     @StateObject private var insightsGenerator = AIInsightsGenerator()
+    @ObservedObject private var openAIService = OpenAIService.shared
     
     var protocolID: UUID?
     var cycleID: UUID?
     
     @State private var isLoading = false
     @State private var expandedPoints: Set<String> = []
+    @State private var showSettings = false
+    @State private var errorMessage: String?
     
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
+                // Test API key indicator
+                if openAIService.isUsingTestKey {
+                    testKeyIndicator
+                }
+                
+                // API key warning if no key is set
+                if !OpenAIService.shared.hasAPIKey() {
+                    noApiKeyView
+                }
+                
+                // Error message if present
+                if let message = errorMessage {
+                    errorView(message)
+                }
+                
                 if isLoading {
                     loadingView
                 } else if let insights = insightsGenerator.latestInsights {
@@ -34,13 +52,95 @@ struct AIInsightsView: View {
                 }
                 .disabled(isLoading)
             }
+            
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    showSettings = true
+                } label: {
+                    Label("Settings", systemImage: "gear")
+                }
+            }
         }
         .onAppear {
             generateInsights()
         }
+        .sheet(isPresented: $showSettings) {
+            AISettingsView(insightsGenerator: insightsGenerator)
+        }
+        .onChange(of: insightsGenerator.error) { newError in
+            if let error = newError {
+                errorMessage = error.localizedDescription
+            } else {
+                errorMessage = nil
+            }
+        }
     }
     
     // MARK: - Private Views
+    
+    private var testKeyIndicator: some View {
+        HStack {
+            Image(systemName: "checkmark.seal.fill")
+                .foregroundColor(.green)
+            Text("Using Test API Key")
+                .font(.caption)
+                .foregroundColor(.green)
+            Spacer()
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(Color.green.opacity(0.1))
+        .cornerRadius(5)
+    }
+    
+    private var noApiKeyView: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Image(systemName: "key.slash")
+                    .foregroundColor(.yellow)
+                Text("OpenAI API Key Required")
+                    .font(.headline)
+                    .foregroundColor(.yellow)
+            }
+            
+            Text("To use AI-powered insights, you need to set up your OpenAI API key in settings.")
+                .font(.subheadline)
+            
+            Button("Set API Key") {
+                showSettings = true
+            }
+            .buttonStyle(.borderedProminent)
+            .padding(.top, 4)
+        }
+        .padding()
+        .background(Color.yellow.opacity(0.1))
+        .cornerRadius(10)
+    }
+    
+    private func errorView(_ message: String) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Image(systemName: "exclamationmark.triangle")
+                    .foregroundColor(.red)
+                Text("Error")
+                    .font(.headline)
+                    .foregroundColor(.red)
+            }
+            
+            Text(message)
+                .font(.subheadline)
+            
+            Button("Try Again") {
+                errorMessage = nil
+                generateInsights(forceRefresh: true)
+            }
+            .buttonStyle(.borderedProminent)
+            .padding(.top, 4)
+        }
+        .padding()
+        .background(Color.red.opacity(0.1))
+        .cornerRadius(10)
+    }
     
     private var loadingView: some View {
         VStack(spacing: 20) {
@@ -62,12 +162,21 @@ struct AIInsightsView: View {
                 .font(.system(size: 40))
                 .foregroundColor(.orange)
             
-            Text("No insights available")
-                .font(.headline)
-            
-            Text("Tap the refresh button to generate insights based on your current protocol or cycle data.")
-                .multilineTextAlignment(.center)
-                .foregroundColor(.secondary)
+            if dataStore.selectedProtocolID == nil && dataStore.selectedCycleID == nil {
+                Text("No protocol or cycle selected")
+                    .font(.headline)
+                
+                Text("Select a protocol or cycle from the Protocols or Cycles tab to generate insights.")
+                    .multilineTextAlignment(.center)
+                    .foregroundColor(.secondary)
+            } else {
+                Text("No insights available")
+                    .font(.headline)
+                
+                Text("Tap the refresh button to generate insights based on your current protocol or cycle data.")
+                    .multilineTextAlignment(.center)
+                    .foregroundColor(.secondary)
+            }
             
             Button("Generate Insights") {
                 generateInsights(forceRefresh: true)
@@ -190,7 +299,7 @@ struct AIInsightsView: View {
     // MARK: - Helper Methods
     
     private func generateInsights(forceRefresh: Bool = false) {
-        isLoading = true
+        self.isLoading = true
         
         if let protocolID = protocolID, let treatmentProtocol = dataStore.profile.protocols.first(where: { $0.id == protocolID }) {
             // Generate insights for a specific protocol
@@ -230,10 +339,16 @@ struct AIInsightsView: View {
                 compoundLibrary: dataStore.compoundLibrary,
                 forceRefresh: forceRefresh
             )
+        } else {
+            // If no protocol or cycle is found, show no insights available
+            self.isLoading = false
+            return
         }
         
-        // Handle loading state through observation
-        isLoading = insightsGenerator.isLoading
+        // Update loading state based on the generator's state
+        DispatchQueue.main.async {
+            self.isLoading = self.insightsGenerator.isLoading
+        }
     }
     
     private func iconForKeyPoint(_ type: KeyPoint.KeyPointType) -> some View {
@@ -272,6 +387,127 @@ struct AIInsightsView: View {
             return .orange
         case .suggestion:
             return .purple
+        }
+    }
+}
+
+// MARK: - AISettingsView
+
+/// View for managing AI settings, including API key
+struct AISettingsView: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var apiKey: String = UserDefaults.standard.string(forKey: "openai_api_key") ?? ""
+    @State private var showingSuccessMessage = false
+    @State private var useTestKey: Bool = UserDefaults.standard.bool(forKey: "use_test_api_key")
+    @EnvironmentObject var dataStore: AppDataStore
+    
+    // Reference to the shared insights generator
+    private let insightsGenerator: AIInsightsGenerator
+    
+    init(insightsGenerator: AIInsightsGenerator = AIInsightsGenerator()) {
+        self.insightsGenerator = insightsGenerator
+    }
+    
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section(header: Text("API Key Options")) {
+                    Toggle("Use Free Test API Key", isOn: $useTestKey)
+                        .onChange(of: useTestKey) { newValue in
+                            OpenAIService.shared.toggleTestApiKey(newValue)
+                            insightsGenerator.refreshAfterAPIKeyChange()
+                        }
+                    
+                    if useTestKey {
+                        Text("Using the free test API key with a $20 spending limit for all test users.")
+                            .font(.caption)
+                            .foregroundColor(.green)
+                    } else {
+                        Text("Using your personal API key.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                
+                if !useTestKey {
+                    Section(header: Text("Personal OpenAI API Key")) {
+                        SecureField("Enter API Key", text: $apiKey)
+                            .autocorrectionDisabled()
+                            .textInputAutocapitalization(.never)
+                        
+                        Text("Your API key is stored securely in your device's UserDefaults and is never shared.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    
+                    Section {
+                        Button("Save API Key") {
+                            OpenAIService.shared.saveAPIKey(apiKey)
+                            insightsGenerator.refreshAfterAPIKeyChange()
+                            showingSuccessMessage = true
+                        }
+                        .disabled(apiKey.isEmpty)
+                        
+                        if !apiKey.isEmpty {
+                            Button("Clear API Key") {
+                                apiKey = ""
+                                OpenAIService.shared.clearAPIKey()
+                                insightsGenerator.refreshAfterAPIKeyChange()
+                                showingSuccessMessage = true
+                            }
+                            .foregroundColor(.red)
+                        }
+                    }
+                }
+                
+                Section(header: Text("About AI Insights")) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("How it works")
+                            .font(.headline)
+                        
+                        Text("The AI Insights feature uses OpenAI's API to analyze your hormone protocols and cycles. It provides personalized feedback, optimization suggestions, and educational content based on your specific therapy details.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(.vertical, 8)
+                    
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Privacy")
+                            .font(.headline)
+                        
+                        Text("Only anonymized therapy data is sent to OpenAI for analysis. No personally identifiable information is shared. All API calls are made directly from your device.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(.vertical, 8)
+                    
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Test API Key")
+                            .font(.headline)
+                        
+                        Text("A free test API key is provided for evaluation purposes with a $20 spending limit across all users. For continued use after testing, we recommend using your own API key.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(.vertical, 8)
+                }
+            }
+            .navigationTitle("AI Settings")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
+            .alert("Settings Saved", isPresented: $showingSuccessMessage) {
+                Button("OK") { }
+            } message: {
+                Text(apiKey.isEmpty ? 
+                     "API key has been cleared. The app will use mock data for insights." : 
+                     "API key has been saved. The app will now use OpenAI for generating insights.")
+            }
         }
     }
 }

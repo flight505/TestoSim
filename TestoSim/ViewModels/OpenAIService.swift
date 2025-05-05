@@ -10,20 +10,37 @@ class OpenAIService {
     /// OpenAI API endpoint
     private let apiEndpoint = "https://api.openai.com/v1/chat/completions"
     
+    /// Test project API key with $20 spending limit (for test users)
+    private let testApiKey = "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"
+    
+    /// Flag to determine if using test API key
+    @Published private(set) var isUsingTestKey = false
+    
     /// OpenAI API key
     private var apiKey: String {
-        // Get API key from UserDefaults or environment
-        return UserDefaults.standard.string(forKey: "openai_api_key") ?? 
-               ProcessInfo.processInfo.environment["OPENAI_API_KEY"] ?? ""
+        // If user has toggled to use the test key, return it
+        if isUsingTestKey {
+            return testApiKey
+        }
+        
+        // Otherwise, get API key from UserDefaults or environment
+        let userKey = UserDefaults.standard.string(forKey: "openai_api_key") ?? 
+                      ProcessInfo.processInfo.environment["OPENAI_API_KEY"] ?? ""
+        
+        // If no user key is available, fall back to the test key
+        return userKey.isEmpty ? testApiKey : userKey
     }
     
     /// The model to use for generating insights
-    private let model = "gpt-4" // Can be changed to "gpt-3.5-turbo" for lower cost
+    private let model = "gpt-4o-mini" // Using the more cost-effective GPT-4o-mini model
     
     // MARK: - Initialization
     
     /// Private initializer to enforce singleton pattern
-    private init() {}
+    private init() {
+        // Check if test key should be used by default
+        self.isUsingTestKey = UserDefaults.standard.bool(forKey: "use_test_api_key")
+    }
     
     // MARK: - API Methods
     
@@ -31,6 +48,8 @@ class OpenAIService {
     /// - Parameter key: The API key
     func saveAPIKey(_ key: String) {
         UserDefaults.standard.set(key, forKey: "openai_api_key")
+        isUsingTestKey = false
+        UserDefaults.standard.set(false, forKey: "use_test_api_key")
     }
     
     /// Check if an API key is available
@@ -42,6 +61,13 @@ class OpenAIService {
     /// Clear the saved API key
     func clearAPIKey() {
         UserDefaults.standard.removeObject(forKey: "openai_api_key")
+    }
+    
+    /// Toggle between using the test API key and the user's API key
+    /// - Parameter useTestKey: Whether to use the test API key
+    func toggleTestApiKey(_ useTestKey: Bool) {
+        isUsingTestKey = useTestKey
+        UserDefaults.standard.set(useTestKey, forKey: "use_test_api_key")
     }
     
     /// Generate protocol insights using the OpenAI API
@@ -222,8 +248,6 @@ class OpenAIService {
         2. Level fluctuations and their implications
         3. Potential optimizations to the protocol
         4. Educational content about the compounds or blend
-        
-        Make sure to provide medically accurate information and include appropriate disclaimers.
         """
     }
     
@@ -236,49 +260,44 @@ class OpenAIService {
     ) -> String {
         // Extract cycle details
         let cycleName = cycle.name
-        let totalWeeks = cycle.totalWeeks
-        let stageCount = cycle.stages.count
+        let cycleStages = cycle.stages
         
         // Build stages information
         var stagesInfo = ""
-        for (index, stage) in cycle.stages.enumerated() {
+        for (index, stage) in cycleStages.enumerated() {
             stagesInfo += """
             
-            STAGE \(index + 1):
+            Stage \(index + 1):
             Name: \(stage.name)
-            Start Week: \(stage.startWeek)
             Duration: \(stage.durationWeeks) weeks
+            Start Week: \(stage.startWeek)
             """
             
-            // Add compounds
+            // Add compounds in stage
             if !stage.compounds.isEmpty {
                 stagesInfo += "\nCompounds:"
                 for compound in stage.compounds {
-                    if let compoundObj = compoundLibrary.compounds.first(where: { $0.id == compound.compoundID }) {
-                        stagesInfo += """
-                        
-                        - \(compoundObj.commonName) \(compoundObj.ester ?? "")
+                    stagesInfo += """
+                    
+                      - \(compound.compoundName)
                           Dose: \(compound.doseMg) mg
                           Frequency: Every \(compound.frequencyDays) days
-                          Route: \(compound.selectedRoute ?? "intramuscular")
-                        """
-                    }
+                          Route: \(compound.administrationRoute)
+                    """
                 }
             }
             
-            // Add blends
+            // Add blends in stage
             if !stage.blends.isEmpty {
                 stagesInfo += "\nBlends:"
                 for blend in stage.blends {
-                    if let blendObj = compoundLibrary.blends.first(where: { $0.id == blend.blendID }) {
-                        stagesInfo += """
-                        
-                        - \(blendObj.name)
+                    stagesInfo += """
+                    
+                      - \(blend.blendName)
                           Dose: \(blend.doseMg) mg
                           Frequency: Every \(blend.frequencyDays) days
-                          Route: \(blend.selectedRoute ?? "intramuscular")
-                        """
-                    }
+                          Route: \(blend.administrationRoute)
+                    """
                 }
             }
         }
@@ -287,6 +306,7 @@ class OpenAIService {
         let maxLevel = simulationData.map { $0.level }.max() ?? 0
         let minLevel = simulationData.map { $0.level }.min() ?? 0
         let avgLevel = simulationData.map { $0.level }.reduce(0, +) / Double(max(1, simulationData.count))
+        let fluctuation = maxLevel > 0 ? (maxLevel - minLevel) / maxLevel * 100 : 0
         
         // Build the prompt
         return """
@@ -301,20 +321,26 @@ class OpenAIService {
         
         CYCLE DETAILS:
         Name: \(cycleName)
-        Total Weeks: \(totalWeeks)
-        Number of Stages: \(stageCount)
+        Total Duration: \(cycle.totalWeeks) weeks
         \(stagesInfo)
         
         SIMULATION STATISTICS:
         Average Level: \(avgLevel) ng/dL
         Maximum Level: \(maxLevel) ng/dL
         Minimum Level: \(minLevel) ng/dL
+        Fluctuation: \(fluctuation)%
         
         Based on this information, provide insights about the cycle in the following JSON format:
         
         {
             "title": "Insights for [Cycle Name]",
             "summary": "A concise summary of the cycle analysis.",
+            "stageBreakdown": [
+                {
+                    "stageNumber": 1,
+                    "analysis": "Analysis of what's happening in this stage and why"
+                }
+            ],
             "keyPoints": [
                 {
                     "title": "Short, specific point title",
@@ -325,30 +351,19 @@ class OpenAIService {
         }
         
         Focus on practical insights about:
-        1. Cycle structure and design
-        2. Compound/blend selection and scheduling
+        1. Stage progression and rationale
+        2. Compound selection and synergies
         3. Level fluctuations and their implications
         4. Potential optimizations to the cycle
-        5. Post-cycle considerations if applicable
-        
-        Make sure to provide medically accurate information and include appropriate disclaimers.
+        5. Educational content about the compounds and how they work together
         """
     }
     
     /// Make a completion request to the OpenAI API
-    private func makeCompletionRequest(
-        content: String,
-        completion: @escaping (Result<[String: Any], Error>) -> Void
-    ) {
-        // Check if API key is available
-        guard !apiKey.isEmpty else {
-            completion(.failure(APIError.missingAPIKey))
-            return
-        }
-        
+    private func makeCompletionRequest(content: String, completion: @escaping (Result<String, Error>) -> Void) {
         // Create URL
         guard let url = URL(string: apiEndpoint) else {
-            completion(.failure(APIError.invalidURL))
+            completion(.failure(NSError(domain: "OpenAIService", code: 0, userInfo: [NSLocalizedDescriptionKey: "Invalid URL"])))
             return
         }
         
@@ -362,44 +377,33 @@ class OpenAIService {
         let requestBody: [String: Any] = [
             "model": model,
             "messages": [
-                ["role": "system", "content": "You are a medical AI assistant specialized in hormone therapy and pharmacokinetics. You provide concise, accurate insights based on simulation data."],
+                ["role": "system", "content": "You are a specialized AI assistant for a hormone therapy simulation app. Provide insights in JSON format only."],
                 ["role": "user", "content": content]
             ],
-            "temperature": 0.7,
+            "temperature": 0.3,
+            "max_tokens": 2000,
             "response_format": ["type": "json_object"]
         ]
         
-        // Serialize request body
-        do {
-            request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
-        } catch {
-            completion(.failure(error))
+        // Convert request body to JSON
+        guard let jsonData = try? JSONSerialization.data(withJSONObject: requestBody) else {
+            completion(.failure(NSError(domain: "OpenAIService", code: 0, userInfo: [NSLocalizedDescriptionKey: "Failed to serialize request body"])))
             return
         }
         
-        // Create task
-        let task = URLSession.shared.dataTask(with: request) { data, response, error in
-            // Check for errors
+        request.httpBody = jsonData
+        
+        // Make the request
+        let task = URLSession.shared.dataTask(with: request) { (data, response, error) in
+            // Handle error
             if let error = error {
                 completion(.failure(error))
                 return
             }
             
-            // Check response status
-            guard let httpResponse = response as? HTTPURLResponse else {
-                completion(.failure(APIError.invalidResponse))
-                return
-            }
-            
-            // Check status code
-            guard (200...299).contains(httpResponse.statusCode) else {
-                completion(.failure(APIError.serverError(statusCode: httpResponse.statusCode)))
-                return
-            }
-            
-            // Check data
+            // Handle no data
             guard let data = data else {
-                completion(.failure(APIError.noData))
+                completion(.failure(NSError(domain: "OpenAIService", code: 0, userInfo: [NSLocalizedDescriptionKey: "No data received"])))
                 return
             }
             
@@ -409,75 +413,91 @@ class OpenAIService {
                    let choices = json["choices"] as? [[String: Any]],
                    let firstChoice = choices.first,
                    let message = firstChoice["message"] as? [String: Any],
-                   let content = message["content"] as? String,
-                   let contentData = content.data(using: .utf8),
-                   let jsonResponse = try JSONSerialization.jsonObject(with: contentData) as? [String: Any] {
-                    completion(.success(jsonResponse))
+                   let content = message["content"] as? String {
+                    completion(.success(content))
                 } else {
-                    completion(.failure(APIError.invalidResponseFormat))
+                    // Try to extract error message if available
+                    if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                       let error = json["error"] as? [String: Any],
+                       let message = error["message"] as? String {
+                        completion(.failure(NSError(domain: "OpenAIService", code: 0, userInfo: [NSLocalizedDescriptionKey: message])))
+                    } else {
+                        completion(.failure(NSError(domain: "OpenAIService", code: 0, userInfo: [NSLocalizedDescriptionKey: "Failed to parse response"])))
+                    }
                 }
             } catch {
                 completion(.failure(error))
             }
         }
         
-        // Start task
         task.resume()
     }
     
-    /// Parse insights from the API response
-    private func parseInsightsFromResponse(_ response: [String: Any], forProtocol treatmentProtocol: InjectionProtocol? = nil, forCycle cycle: Cycle? = nil) throws -> Insights {
-        // Extract title
-        guard let title = response["title"] as? String else {
-            throw APIError.missingField("title")
+    /// API response structure for insights
+    private struct APIInsightsResponse: Decodable {
+        let title: String
+        let summary: String
+        let blendExplanation: String?
+        let stageBreakdown: [APIStageBreakdown]?
+        let keyPoints: [APIKeyPoint]
+        
+        struct APIKeyPoint: Decodable {
+            let title: String
+            let description: String
+            let type: String
         }
         
-        // Extract summary
-        guard let summary = response["summary"] as? String else {
-            throw APIError.missingField("summary")
+        struct APIStageBreakdown: Decodable {
+            let stageNumber: Int
+            let analysis: String
+        }
+    }
+    
+    /// Stage analysis information
+    private struct StageAnalysis {
+        let stageNumber: Int
+        let analysis: String
+    }
+    
+    /// Parse insights from the OpenAI API response
+    private func parseInsightsFromResponse(_ jsonString: String, forProtocol protocol: InjectionProtocol? = nil, forCycle cycle: Cycle? = nil) throws -> Insights {
+        let decoder = JSONDecoder()
+        
+        // Extract the JSON structure from the response
+        guard let jsonData = jsonString.data(using: .utf8) else {
+            throw NSError(domain: "OpenAIService", code: 0, userInfo: [NSLocalizedDescriptionKey: "Failed to convert response to data"])
         }
         
-        // Extract blend explanation (optional)
-        let blendExplanation = response["blendExplanation"] as? String
-        
-        // Extract key points
-        guard let keyPointsArray = response["keyPoints"] as? [[String: Any]] else {
-            throw APIError.missingField("keyPoints")
-        }
-        
-        // Parse key points
-        var keyPoints: [KeyPoint] = []
-        for pointDict in keyPointsArray {
-            guard let title = pointDict["title"] as? String,
-                  let description = pointDict["description"] as? String,
-                  let typeString = pointDict["type"] as? String else {
-                continue
+        // Try to decode as APIInsightsResponse
+        do {
+            let response = try decoder.decode(APIInsightsResponse.self, from: jsonData)
+            
+            // Convert API response to Insights model
+            var keyPoints: [KeyPoint] = []
+            for point in response.keyPoints {
+                let type: KeyPoint.KeyPointType
+                switch point.type {
+                case "information": type = .information
+                case "positive": type = .positive
+                case "warning": type = .warning
+                case "suggestion": type = .suggestion
+                default: type = .information
+                }
+                
+                keyPoints.append(KeyPoint(title: point.title, description: point.description, type: type))
             }
             
-            let type: KeyPoint.KeyPointType
-            switch typeString {
-            case "information":
-                type = .information
-            case "positive":
-                type = .positive
-            case "warning":
-                type = .warning
-            case "suggestion":
-                type = .suggestion
-            default:
-                type = .information
-            }
-            
-            keyPoints.append(KeyPoint(title: title, description: description, type: type))
+            // Create the Insights object
+            return Insights(
+                title: response.title,
+                summary: response.summary,
+                blendExplanation: response.blendExplanation,
+                keyPoints: keyPoints
+            )
+        } catch {
+            print("Error parsing insights: \(error)")
+            throw error
         }
-        
-        // Create and return insights
-        return Insights(
-            title: title,
-            summary: summary,
-            blendExplanation: blendExplanation,
-            keyPoints: keyPoints
-        )
     }
     
     // MARK: - Error Types
