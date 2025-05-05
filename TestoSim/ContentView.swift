@@ -11,8 +11,34 @@ struct ContentView: View {
     @EnvironmentObject var dataStore: AppDataStore
     
     var body: some View {
-        NavigationStack {
-            ProtocolListView()
+        TabView {
+            NavigationStack {
+                ProtocolListView()
+            }
+            .tabItem {
+                Label("Protocols", systemImage: "list.bullet")
+            }
+            
+            NavigationStack {
+                CyclePlannerView()
+            }
+            .tabItem {
+                Label("Cycles", systemImage: "calendar")
+            }
+            
+            NavigationStack {
+                AIInsightsView()
+            }
+            .tabItem {
+                Label("Insights", systemImage: "lightbulb")
+            }
+            
+            NavigationStack {
+                ProfileView()
+            }
+            .tabItem {
+                Label("Profile", systemImage: "person")
+            }
         }
     }
 }

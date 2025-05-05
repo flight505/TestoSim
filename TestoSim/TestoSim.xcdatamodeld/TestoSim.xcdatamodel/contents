@@ -21,6 +21,24 @@
         <relationship name="components" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="CDVialComponent" inverseName="compound" inverseEntity="CDVialComponent"/>
         <relationship name="protocols" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="CDInjectionProtocol" inverseName="ester" inverseEntity="CDInjectionProtocol"/>
     </entity>
+    <entity name="CDCycle" representedClassName="CDCycle" syncable="YES" codeGenerationType="category">
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="name" optional="YES" attributeType="String"/>
+        <attribute name="notes" optional="YES" attributeType="String"/>
+        <attribute name="startDate" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="totalWeeks" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <relationship name="stages" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="CDCycleStage" inverseName="cycle" inverseEntity="CDCycleStage"/>
+        <relationship name="userProfile" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="CDUserProfile" inverseName="cycles" inverseEntity="CDUserProfile"/>
+    </entity>
+    <entity name="CDCycleStage" representedClassName="CDCycleStage" syncable="YES" codeGenerationType="category">
+        <attribute name="blendsData" optional="YES" attributeType="Binary"/>
+        <attribute name="compoundsData" optional="YES" attributeType="Binary"/>
+        <attribute name="durationWeeks" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="name" optional="YES" attributeType="String"/>
+        <attribute name="startWeek" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <relationship name="cycle" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="CDCycle" inverseName="stages" inverseEntity="CDCycle"/>
+    </entity>
     <entity name="CDInjectionProtocol" representedClassName="CDInjectionProtocol" syncable="YES" codeGenerationType="category">
         <attribute name="doseMg" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
         <attribute name="frequencyDays" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
@@ -41,7 +59,9 @@
         <attribute name="name" optional="YES" attributeType="String"/>
         <attribute name="unit" optional="YES" attributeType="String"/>
         <attribute name="usesICloudSync" optional="YES" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="useTwoCompartmentModel" optional="YES" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
         <attribute name="weight" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <relationship name="cycles" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="CDCycle" inverseName="userProfile" inverseEntity="CDCycle"/>
         <relationship name="protocols" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="CDInjectionProtocol" inverseName="profile" inverseEntity="CDInjectionProtocol"/>
     </entity>
     <entity name="CDVialBlend" representedClassName="CDVialBlend" syncable="YES" codeGenerationType="category">

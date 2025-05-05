@@ -23,6 +23,7 @@ extension UserProfile {
         }
         
         self.usesICloudSync = cdProfile.usesICloudSync
+        self.useTwoCompartmentModel = cdProfile.useTwoCompartmentModel
         
         // Extract protocols
         if let cdProtocols = cdProfile.protocols as? Set<CDInjectionProtocol> {
@@ -58,6 +59,7 @@ extension UserProfile {
             cdProfile.weight = self.weight ?? 0
             cdProfile.biologicalSex = self.biologicalSex.rawValue
             cdProfile.usesICloudSync = self.usesICloudSync
+            cdProfile.useTwoCompartmentModel = self.useTwoCompartmentModel
             
             // Handle protocols (this will be more complex due to relationships)
             // We'd need to compare existing protocols with new ones
@@ -444,5 +446,108 @@ extension VialBlend.Component {
         
         self.compoundID = compoundID
         self.mgPerML = cdComponent.mgPerML
+    }
+}
+
+// MARK: - Cycle Extensions
+
+extension Cycle {
+    init(from cdCycle: CDCycle, context: NSManagedObjectContext) {
+        self.id = cdCycle.id ?? UUID()
+        self.name = cdCycle.name ?? "Unnamed Cycle"
+        self.startDate = cdCycle.startDate ?? Date()
+        self.totalWeeks = Int(cdCycle.totalWeeks)
+        self.notes = cdCycle.notes
+        
+        // Load stages if they exist
+        if let cdStages = cdCycle.stages as? Set<CDCycleStage>, !cdStages.isEmpty {
+            self.stages = cdStages.map { CycleStage(from: $0) }.sorted { $0.startWeek < $1.startWeek }
+        }
+    }
+    
+    func save(to context: NSManagedObjectContext) -> CDCycle {
+        let cdCycle: CDCycle
+        
+        // Try to find existing entity first
+        let fetchRequest: NSFetchRequest<CDCycle> = CDCycle.fetchRequest()
+        fetchRequest.predicate = NSPredicate(format: "id == %@", self.id as CVarArg)
+        
+        if let existingCycle = try? context.fetch(fetchRequest).first {
+            cdCycle = existingCycle
+        } else {
+            cdCycle = CDCycle(context: context)
+            cdCycle.id = self.id
+        }
+        
+        // Update properties
+        cdCycle.name = self.name
+        cdCycle.startDate = self.startDate
+        cdCycle.totalWeeks = Int32(self.totalWeeks)
+        cdCycle.notes = self.notes
+        
+        // Remove old stages
+        if let existingStages = cdCycle.stages as? Set<CDCycleStage> {
+            for stage in existingStages {
+                context.delete(stage)
+            }
+        }
+        
+        // Add new stages
+        for stage in self.stages {
+            let cdStage = stage.save(to: context)
+            cdStage.cycle = cdCycle
+        }
+        
+        return cdCycle
+    }
+}
+
+extension CycleStage {
+    init(from cdStage: CDCycleStage) {
+        self.id = cdStage.id ?? UUID()
+        self.name = cdStage.name ?? "Unnamed Stage"
+        self.startWeek = Int(cdStage.startWeek)
+        self.durationWeeks = Int(cdStage.durationWeeks)
+        
+        // Parse compounds and blends from JSON
+        if let compoundsData = cdStage.compoundsData, 
+           let compoundsArray = try? JSONDecoder().decode([CompoundStageItem].self, from: compoundsData) {
+            self.compounds = compoundsArray
+        }
+        
+        if let blendsData = cdStage.blendsData,
+           let blendsArray = try? JSONDecoder().decode([BlendStageItem].self, from: blendsData) {
+            self.blends = blendsArray
+        }
+    }
+    
+    func save(to context: NSManagedObjectContext) -> CDCycleStage {
+        let cdStage: CDCycleStage
+        
+        // Try to find existing entity first
+        let fetchRequest: NSFetchRequest<CDCycleStage> = CDCycleStage.fetchRequest()
+        fetchRequest.predicate = NSPredicate(format: "id == %@", self.id as CVarArg)
+        
+        if let existingStage = try? context.fetch(fetchRequest).first {
+            cdStage = existingStage
+        } else {
+            cdStage = CDCycleStage(context: context)
+            cdStage.id = self.id
+        }
+        
+        // Update properties
+        cdStage.name = self.name
+        cdStage.startWeek = Int32(self.startWeek)
+        cdStage.durationWeeks = Int32(self.durationWeeks)
+        
+        // Save compounds and blends as JSON
+        do {
+            cdStage.compoundsData = try JSONEncoder().encode(self.compounds)
+            cdStage.blendsData = try JSONEncoder().encode(self.blends)
+        } catch {
+            print("Error encoding stage items: \(error)")
+        }
+        
+        return cdStage
     }
 } 

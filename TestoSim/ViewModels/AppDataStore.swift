@@ -11,9 +11,20 @@ class AppDataStore: ObservableObject {
     @Published var protocolToEdit: InjectionProtocol?
     @Published var compoundLibrary = CompoundLibrary()
     
+    // Cycle management
+    @Published var cycles: [Cycle] = []
+    @Published var selectedCycleID: UUID?
+    @Published var isPresentingCycleForm = false
+    @Published var cycleToEdit: Cycle?
+    @Published var isCycleSimulationActive = false
+    @Published var cycleSimulationData: [DataPoint] = []
+    
     // Core Data manager
     private static let coreDataManager = CoreDataManager.shared
     private let coreDataManager = CoreDataManager.shared
+    
+    // Notification manager
+    private let notificationManager = NotificationManager.shared
     
     // Add PKModel instance
     private let pkModel = PKModel(useTwoCompartmentModel: false)
@@ -28,6 +39,8 @@ class AppDataStore: ObservableObject {
         return selectedProtocol.startDate.addingTimeInterval(simulationDurationDays * 24 * 3600)
     }
     
+    // MARK: - Initialization
+    
     init() {
         // Initialize profile with a default empty profile first
         self.profile = UserProfile()
@@ -40,6 +53,9 @@ class AppDataStore: ObservableObject {
             } else {
                 self.profile = AppDataStore.createDefaultProfile()
             }
+            
+            // Load cycles from Core Data if migrated
+            loadCyclesFromCoreData()
         } else {
             // Try to load profile from UserDefaults (old method)
             if let savedData = UserDefaults.standard.data(forKey: "userProfileData"),
@@ -63,7 +79,81 @@ class AppDataStore: ObservableObject {
         
         // Generate initial simulation data
         recalcSimulation()
+        
+        // Schedule notifications for all protocols if enabled
+        if notificationManager.notificationsEnabled {
+            Task {
+                await scheduleAllNotifications()
+            }
+        }
     }
+    
+    // MARK: - Notification Management
+    
+    func toggleNotifications(enabled: Bool) {
+        notificationManager.notificationsEnabled = enabled
+        
+        if enabled {
+            Task {
+                let granted = await notificationManager.requestNotificationPermission()
+                
+                // If permission granted, schedule notifications
+                if granted {
+                    await scheduleAllNotifications()
+                } else {
+                    // Permission denied - disable notifications
+                    await MainActor.run {
+                        notificationManager.notificationsEnabled = false
+                    }
+                }
+            }
+        } else {
+            // Cancel all notifications if disabled
+            notificationManager.cancelAllNotifications()
+        }
+    }
+    
+    func setNotificationSound(enabled: Bool) {
+        notificationManager.soundEnabled = enabled
+        
+        // Reschedule all notifications to apply sound setting
+        if notificationManager.notificationsEnabled {
+            Task {
+                await scheduleAllNotifications()
+            }
+        }
+    }
+    
+    func setNotificationLeadTime(_ leadTime: NotificationManager.LeadTime) {
+        notificationManager.selectedLeadTime = leadTime
+        
+        // Reschedule all notifications to apply lead time
+        if notificationManager.notificationsEnabled {
+            Task {
+                await scheduleAllNotifications()
+            }
+        }
+    }
+    
+    func scheduleAllNotifications() async {
+        // Request permission if needed
+        if notificationManager.notificationsEnabled {
+            let granted = await notificationManager.requestNotificationPermission()
+            if !granted {
+                await MainActor.run {
+                    notificationManager.notificationsEnabled = false
+                }
+                return
+            }
+            
+            // Schedule notifications for all active protocols
+            for p in profile.protocols {
+                notificationManager.scheduleNotifications(for: p, using: compoundLibrary)
+            }
+        }
+    }
+    
+    // MARK: - Protocol Management
     
     private static func createDefaultProfile() -> UserProfile {
         var profile = UserProfile()
@@ -189,6 +279,11 @@ class AppDataStore: ObservableObject {
         selectedProtocolID = newProtocol.id
         recalcSimulation()
         saveProfile()
+        
+        // Schedule notifications for the new protocol
+        if notificationManager.notificationsEnabled {
+            notificationManager.scheduleNotifications(for: newProtocol, using: compoundLibrary)
+        }
     }
     
     func updateProtocol(_ updatedProtocol: InjectionProtocol) {
@@ -198,11 +293,18 @@ class AppDataStore: ObservableObject {
                 recalcSimulation()
             }
             saveProfile()
+            
+            // Update notifications for the modified protocol
+            if notificationManager.notificationsEnabled {
+                notificationManager.scheduleNotifications(for: updatedProtocol, using: compoundLibrary)
+            }
         }
     }
     
     func removeProtocol(at offsets: IndexSet) {
-        let deletedIDs = offsets.map { profile.protocols[$0].id }
+        let deletedProtocols = offsets.map { profile.protocols[$0] }
+        let deletedIDs = deletedProtocols.map { $0.id }
+        
         profile.protocols.remove(atOffsets: offsets)
         
         // Check if selected protocol was deleted
@@ -212,6 +314,11 @@ class AppDataStore: ObservableObject {
         }
         
         saveProfile()
+        
+        // Cancel notifications for deleted protocols
+        for item in deletedProtocols {
+            notificationManager.cancelNotifications(for: item.id)
+        }
     }
     
     func selectProtocol(id: UUID) {
@@ -598,5 +705,286 @@ class AppDataStore: ObservableObject {
         }
         
         return (timeToMaxDays: 0, maxConcentration: 0)
+    }
+    
+    // MARK: - Adherence Tracking
+    
+    func acknowledgeInjection(protocolID: UUID, injectionDate: Date) {
+        notificationManager.acknowledgeInjection(protocolID: protocolID, injectionDate: injectionDate)
+    }
+    
+    func adherenceStats() -> (total: Int, onTime: Int, late: Int, missed: Int) {
+        return notificationManager.adherenceStats()
+    }
+    
+    func adherencePercentage() -> Double {
+        return notificationManager.adherencePercentage()
+    }
+    
+    func injectionHistory(for protocolID: UUID? = nil) -> [NotificationManager.InjectionRecord] {
+        return notificationManager.injectionHistory(for: protocolID)
+    }
+    
+    // Clean up old records periodically
+    func cleanupOldRecords() {
+        notificationManager.cleanupOldRecords()
+    }
+    
+    // MARK: - Cycle Management
+    
+    func loadCyclesFromCoreData() {
+        let context = coreDataManager.persistentContainer.viewContext
+        let fetchRequest: NSFetchRequest<CDCycle> = CDCycle.fetchRequest()
+        
+        do {
+            let cdCycles = try context.fetch(fetchRequest)
+            self.cycles = cdCycles.map { Cycle(from: $0, context: context) }
+        } catch {
+            print("Error loading cycles from Core Data: \(error)")
+        }
+    }
+    
+    func saveCycle(_ cycle: Cycle) {
+        let context = coreDataManager.persistentContainer.viewContext
+        
+        // Save to Core Data
+        _ = cycle.save(to: context)
+        
+        do {
+            try context.save()
+            
+            // Refresh cycles from Core Data
+            loadCyclesFromCoreData()
+        } catch {
+            print("Error saving cycle: \(error)")
+        }
+    }
+    
+    func deleteCycle(with id: UUID) {
+        let context = coreDataManager.persistentContainer.viewContext
+        let fetchRequest: NSFetchRequest<CDCycle> = CDCycle.fetchRequest()
+        fetchRequest.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+        
+        do {
+            if let cdCycle = try context.fetch(fetchRequest).first {
+                context.delete(cdCycle)
+                try context.save()
+                
+                // Refresh cycles from Core Data
+                loadCyclesFromCoreData()
+                
+                // If this was the selected cycle, deselect it
+                if selectedCycleID == id {
+                    selectedCycleID = nil
+                    isCycleSimulationActive = false
+                    cycleSimulationData = []
+                }
+            }
+        } catch {
+            print("Error deleting cycle: \(error)")
+        }
+    }
+    
+    func simulateCycle(id: UUID? = nil) {
+        let cycleToSimulate: Cycle?
+        
+        if let id = id {
+            cycleToSimulate = cycles.first { $0.id == id }
+        } else if let id = selectedCycleID {
+            cycleToSimulate = cycles.first { $0.id == id }
+        } else {
+            cycleToSimulate = cycles.first
+        }
+        
+        guard let cycle = cycleToSimulate else {
+            cycleSimulationData = []
+            return
+        }
+        
+        // Create protocols for simulation
+        let tempProtocols = cycle.generateTemporaryProtocols(compoundLibrary: compoundLibrary)
+        
+        // No protocols to simulate
+        if tempProtocols.isEmpty {
+            cycleSimulationData = []
+            return
+        }
+        
+        // Create a properly configured PK model using our helper method
+        let pkModel = createPKModel()
+        
+        // Clear existing data
+        cycleSimulationData = []
+        
+        // Generate dates for simulation
+        let calendar = Calendar.current
+        let startDate = cycle.startDate
+        let endDate = calendar.date(byAdding: .day, value: cycle.totalWeeks * 7, to: startDate) ?? startDate
+        let simulationDates = generateSimulationDates(
+            startDate: startDate,
+            endDate: endDate,
+            interval: 0.5 // Two points per day for smooth curves
+        )
+        
+        // Initialize data array
+        var totalConcentrations = Array(repeating: 0.0, count: simulationDates.count)
+        
+        // For each protocol, generate concentration data and accumulate
+        for treatmentProtocol in tempProtocols {
+            // Get simulation parameters
+            let routeStr = treatmentProtocol.selectedRoute ?? Compound.Route.intramuscular.rawValue
+            let route = Compound.Route(rawValue: routeStr) ?? .intramuscular
+            let weight = profile.weight ?? 70.0
+            
+            // Get compound or blend for this protocol
+            var compounds: [(compound: Compound, dosePerInjectionMg: Double)] = []
+            
+            if treatmentProtocol.protocolType == .compound, let compoundID = treatmentProtocol.compoundID {
+                if let compound = compoundLibrary.compounds.first(where: { $0.id == compoundID }) {
+                    compounds = [(compound, treatmentProtocol.doseMg)]
+                }
+            } else if treatmentProtocol.protocolType == .blend, let blendID = treatmentProtocol.blendID {
+                if let blend = compoundLibrary.blends.first(where: { $0.id == blendID }) {
+                    compounds = blend.components.map { component in
+                        (component.compound, treatmentProtocol.doseMg * (component.percentageAmount / 100.0))
+                    }
+                }
+            }
+            
+            // Skip if no compounds
+            guard !compounds.isEmpty else { continue }
+            
+            // Generate injection dates
+            let injectionDates = treatmentProtocol.generateInjectionDates(endDate: endDate)
+            
+            // Calculate concentrations
+            let concentrations = pkModel.protocolConcentrations(
+                at: simulationDates,
+                injectionDates: injectionDates,
+                compounds: compounds,
+                route: route,
+                weight: weight,
+                calibrationFactor: profile.calibrationFactor
+            )
+            
+            // Add to total
+            for i in 0..<min(totalConcentrations.count, concentrations.count) {
+                totalConcentrations[i] += concentrations[i]
+            }
+        }
+        
+        // Convert to DataPoints
+        cycleSimulationData = zip(simulationDates, totalConcentrations).map {
+            DataPoint(time: $0, level: $1)
+        }
+        
+        isCycleSimulationActive = true
+    }
+    
+    // Add a new method to simplify access to the model
+    private func createPKModel() -> PKModel {
+        return PKModel(useTwoCompartmentModel: profile.useTwoCompartmentModel)
+    }
+    
+    // Update the existing simulateProtocol method to use the two-compartment model setting
+    func simulateProtocol(id: UUID? = nil) {
+        let protocolToSimulate: InjectionProtocol?
+        
+        if let id = id {
+            protocolToSimulate = profile.protocols.first { $0.id == id }
+        } else if let id = selectedProtocolID {
+            protocolToSimulate = profile.protocols.first { $0.id == id }
+        } else {
+            protocolToSimulate = profile.protocols.first
+        }
+        
+        guard let treatmentProtocol = protocolToSimulate else {
+            simulationData = []
+            return
+        }
+        
+        // Use the new helper method to create a properly configured PK model
+        let pkModel = createPKModel()
+        
+        let now = Date()
+        let calendar = Calendar.current
+        
+        // For better visualization, generate data points from 1 week before first dose
+        // until 3 dosing intervals after the most recent planned dose
+        let startDate = calendar.date(byAdding: .day, value: -7, to: treatmentProtocol.startDate) ?? treatmentProtocol.startDate
+        
+        // Calculate the projected last date based on today + 30 days
+        let projectedEndDate = calendar.date(byAdding: .day, value: 30, to: now) ?? now
+        
+        // Generate simulation dates
+        let simulationDates = generateSimulationDates(
+            startDate: startDate,
+            endDate: projectedEndDate,
+            interval: max(0.25, treatmentProtocol.frequencyDays / 16.0) // 16 points per interval for smoother curve
+        )
+        
+        // Generate injection dates
+        let injectionDates = treatmentProtocol.generateInjectionDates(endDate: projectedEndDate)
+        
+        // Weight for allometric scaling
+        let weight = profile.weight ?? 70.0 // Default to 70kg if not specified
+        
+        // Get compound or blend for this protocol
+        var compounds: [(compound: Compound, dosePerInjectionMg: Double)] = []
+        
+        if treatmentProtocol.protocolType == .compound, let compoundID = treatmentProtocol.compoundID {
+            if let compound = compoundLibrary.compounds.first(where: { $0.id == compoundID }) {
+                compounds = [(compound, treatmentProtocol.doseMg)]
+            }
+        } else if treatmentProtocol.protocolType == .blend, let blendID = treatmentProtocol.blendID {
+            if let blend = compoundLibrary.blends.first(where: { $0.id == blendID }) {
+                // Get all compounds from the blend with their proportional doses
+                compounds = blend.components.map { component in
+                    (component.compound, treatmentProtocol.doseMg * (component.percentageAmount / 100.0))
+                }
+            }
+        } else {
+            // Legacy protocol with testosterone ester - convert to compound
+            if let compound = compoundLibrary.compoundFromEster(treatmentProtocol.ester ?? "") {
+                compounds = [(compound, treatmentProtocol.doseMg)]
+            }
+        }
+        
+        // Make sure we have compounds to simulate
+        guard !compounds.isEmpty else {
+            simulationData = []
+            return
+        }
+        
+        // Get the route
+        let routeStr = treatmentProtocol.selectedRoute ?? Compound.Route.intramuscular.rawValue
+        let route = Compound.Route(rawValue: routeStr) ?? .intramuscular
+        
+        // Calculate the concentrations at each time point
+        let concentrations = pkModel.protocolConcentrations(
+            at: simulationDates,
+            injectionDates: injectionDates,
+            compounds: compounds,
+            route: route,
+            weight: weight,
+            calibrationFactor: profile.calibrationFactor
+        )
+        
+        // Convert to DataPoint array
+        simulationData = zip(simulationDates, concentrations).map {
+            DataPoint(time: $0, level: $1)
+        }
+    }
+    
+    // Add this method to generate simulation dates
+    private func generateSimulationDates(startDate: Date, endDate: Date, interval: Double) -> [Date] {
+        let calendar = Calendar.current
+        let dateComponents = calendar.dateComponents([.day], from: startDate, to: endDate)
+        guard let days = dateComponents.day, days > 0 else { return [startDate] }
+        
+        // Create date points for the simulation period with the specified interval (in days)
+        return stride(from: 0, to: Double(days), by: interval).map { day in
+            startDate.addingTimeInterval(day * 24 * 3600)
+        }
     }
 } 

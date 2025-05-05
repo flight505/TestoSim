@@ -4,6 +4,8 @@ struct ProtocolDetailView: View {
     @EnvironmentObject var dataStore: AppDataStore
     @State private var showingAddBloodSheet = false
     @State private var showingCalibrateConfirm = false
+    @State private var showingNotificationOptions = false
+    @State private var showingEnableNotificationsAlert = false
     
     let injectionProtocol: InjectionProtocol
     
@@ -39,36 +41,11 @@ struct ProtocolDetailView: View {
                     .cornerRadius(8)
                     .padding(.vertical)
                 
-                // Action buttons
-                HStack {
-                    Button(action: {
-                        showingAddBloodSheet = true
-                    }) {
-                        Label("Add Bloodwork", systemImage: "drop.fill")
-                    }
-                    .buttonStyle(.bordered)
-                    
-                    Spacer()
-                    
-                    Button(action: {
-                        dataStore.calibrateProtocol(injectionProtocol)
-                        showingCalibrateConfirm = true
-                    }) {
-                        Label("Recalibrate Model", systemImage: "slider.horizontal.3")
-                    }
-                    .buttonStyle(.bordered)
-                    .disabled(injectionProtocol.bloodSamples.isEmpty)
-                    
-                    // New navigation link to calibration details - disable for now until we implement proper calibration results
-                    Button {
-                        // This will be enabled when we properly implement calibration in a future update
-                    } label: {
-                        Label("View Calibration Details", systemImage: "chart.xyaxis.line")
-                    }
-                    .buttonStyle(.bordered)
-                    .disabled(true) // Disable for now until full calibration is implemented
-                }
-                .padding(.horizontal)
+                // Next injection information
+                nextInjectionView
+                
+                // Action buttons section
+                actionButtonsView
             }
             .padding()
         }
@@ -89,9 +66,109 @@ struct ProtocolDetailView: View {
         .alert("Calibration Updated", isPresented: $showingCalibrateConfirm) {
             Button("OK", role: .cancel) { }
         }
+        .alert("Enable Notifications", isPresented: $showingEnableNotificationsAlert) {
+            Button("Settings", role: .none) {
+                showingNotificationOptions = true
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("Notifications are currently disabled. Would you like to enable them in settings?")
+        }
+        .sheet(isPresented: $showingNotificationOptions) {
+            NotificationSettingsView()
+                .environmentObject(dataStore)
+        }
         .onAppear {
             dataStore.selectProtocol(id: injectionProtocol.id)
         }
+    }
+    
+    // MARK: - Next Injection View
+    
+    var nextInjectionView: some View {
+        let nextInjection = nextInjectionDate()
+        
+        return VStack(alignment: .leading, spacing: 8) {
+            Text("Next Injection")
+                .font(.headline)
+            
+            HStack {
+                if let nextDate = nextInjection {
+                    VStack(alignment: .leading) {
+                        Text(nextDate, style: .date)
+                            .font(.title3)
+                            .foregroundColor(.primary)
+                        
+                        Text(daysUntilNextInjection(nextDate))
+                            .foregroundColor(.secondary)
+                    }
+                    
+                    Spacer()
+                    
+                    Button(action: {
+                        if NotificationManager.shared.notificationsEnabled {
+                            NotificationManager.shared.scheduleNotifications(
+                                for: injectionProtocol,
+                                using: dataStore.compoundLibrary
+                            )
+                        } else {
+                            showingEnableNotificationsAlert = true
+                        }
+                    }) {
+                        Label("Remind Me", systemImage: "bell")
+                    }
+                    .buttonStyle(.borderedProminent)
+                } else {
+                    Text("No upcoming injections scheduled")
+                        .foregroundColor(.secondary)
+                        .italic()
+                }
+            }
+        }
+        .padding()
+        .background(Color(.systemGray6))
+        .cornerRadius(10)
+    }
+    
+    // MARK: - Action Buttons View
+    
+    var actionButtonsView: some View {
+        HStack {
+            Button(action: {
+                showingAddBloodSheet = true
+            }) {
+                Label("Add Bloodwork", systemImage: "drop.fill")
+            }
+            .buttonStyle(.bordered)
+            
+            Spacer()
+            
+            // Record injection button (acknowledges adherence)
+            Button(action: {
+                if let nextDate = nextInjectionDate() {
+                    dataStore.acknowledgeInjection(
+                        protocolID: injectionProtocol.id,
+                        injectionDate: nextDate
+                    )
+                }
+            }) {
+                Label("Record Injection", systemImage: "checkmark.circle")
+            }
+            .buttonStyle(.bordered)
+            .disabled(nextInjectionDate() == nil)
+            
+            Spacer()
+            
+            Button(action: {
+                dataStore.calibrateProtocol(injectionProtocol)
+                showingCalibrateConfirm = true
+            }) {
+                Label("Recalibrate", systemImage: "slider.horizontal.3")
+            }
+            .buttonStyle(.bordered)
+            .disabled(injectionProtocol.bloodSamples.isEmpty)
+        }
+        .padding(.horizontal)
     }
     
     // MARK: - Protocol summary based on protocol type
@@ -304,6 +381,34 @@ struct ProtocolDetailView: View {
         }
         formatter.minimumFractionDigits = formatter.maximumFractionDigits // Ensure consistency
         return formatter.string(from: NSNumber(value: value)) ?? "\(value)"
+    }
+    
+    // MARK: - Helper Methods
+    
+    private func nextInjectionDate() -> Date? {
+        let today = Date()
+        let endDate = today.addingTimeInterval(60 * 24 * 3600) // Look 60 days ahead
+        let upcomingDates = injectionProtocol.injectionDates(from: today, upto: endDate)
+        
+        return upcomingDates.first
+    }
+    
+    private func daysUntilNextInjection(_ nextDate: Date) -> String {
+        let today = Date()
+        let calendar = Calendar.current
+        let components = calendar.dateComponents([.day, .hour], from: today, to: nextDate)
+        
+        if let days = components.day, let hours = components.hour {
+            if days == 0 {
+                return "Today"
+            } else if days == 1 {
+                return "Tomorrow"
+            } else {
+                return "In \(days) days, \(hours) hours"
+            }
+        }
+        
+        return ""
     }
 }
 
