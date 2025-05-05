@@ -10,6 +10,26 @@ struct InjectionProtocol: Identifiable, Codable {
     var notes: String?
     var bloodSamples: [BloodSample] = []
     
+    // MARK: - New properties for compound/blend support
+    
+    // Optional properties for refined PK model
+    var compoundID: UUID?
+    var blendID: UUID?
+    var selectedRoute: String? // Will store Compound.Route.rawValue
+    
+    // Computed property to determine what type of protocol this is
+    var protocolType: ProtocolType {
+        if compoundID != nil {
+            return .compound
+        } else if blendID != nil {
+            return .blend
+        } else {
+            return .legacyEster
+        }
+    }
+    
+    // MARK: - Injection dates calculation
+    
     func injectionDates(from simulationStartDate: Date, upto endDate: Date) -> [Date] {
         var dates: [Date] = []
         var current = startDate
@@ -51,4 +71,12 @@ struct InjectionProtocol: Identifiable, Codable {
         }
         return dates
     }
+}
+
+// MARK: - Protocol type enum
+
+enum ProtocolType: String, Codable {
+    case legacyEster // Using original TestosteroneEster
+    case compound    // Using single Compound
+    case blend       // Using VialBlend
 } 

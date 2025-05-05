@@ -434,4 +434,211 @@ struct PKModel {
         
         return numerator / denominator
     }
+    
+    // MARK: - Time to Peak and Maximum Concentration
+    
+    /// Calculate the time to peak concentration for a given dose
+    /// - Parameters:
+    ///   - dose: Dose in mg
+    ///   - halfLifeDays: Half-life in days
+    ///   - absorptionRateKa: Absorption rate constant (ka) in d⁻¹
+    ///   - bioavailability: Fraction of drug absorbed (0-1)
+    ///   - weight: Patient weight in kg (for allometric scaling)
+    ///   - calibrationFactor: User-specific calibration factor
+    /// - Returns: Time to peak concentration in days
+    func calculateTimeToMaxConcentration(
+        dose: Double,
+        halfLifeDays: Double,
+        absorptionRateKa: Double,
+        bioavailability: Double = 1.0,
+        weight: Double = 70.0,
+        calibrationFactor: Double = 1.0
+    ) -> Double {
+        // Skip calculation if impossible parameters
+        guard halfLifeDays > 0 && absorptionRateKa > 0 else { return 0 }
+        
+        // Elimination rate constant (ke) = ln(2)/t_1/2
+        let ke = log(2) / halfLifeDays
+        
+        // For one-compartment model with first-order absorption,
+        // Tp = ln(ka/ke) / (ka - ke)
+        // This is derived by setting the derivative of the concentration equation to zero
+        guard absorptionRateKa > ke else {
+            // If ka <= ke, then Tp is effectively 0 (immediate peak for IV bolus)
+            return 0
+        }
+        
+        if useTwoCompartmentModel {
+            // For two-compartment model, need numerical approach to find Tp
+            // This is a simplified approximation - would use a more sophisticated
+            // numerical method in a full implementation
+            
+            // Calculate alpha and beta for two-compartment model
+            let beta = 0.5 * ((k12 + k21 + ke) - sqrt(pow(k12 + k21 + ke, 2) - 4 * k21 * ke))
+            let alpha = (k21 * ke) / beta
+            
+            // Approximate Tp using numerical search (rough estimate)
+            var bestTime = 0.0
+            var maxConc = 0.0
+            
+            // Search from 0 to about 5 half-lives with small steps
+            let searchEnd = 5 * halfLifeDays
+            let step = halfLifeDays / 50.0
+            
+            for t in stride(from: 0, through: searchEnd, by: step) {
+                let conc = concentration(
+                    at: t,
+                    dose: dose,
+                    halfLifeDays: halfLifeDays,
+                    absorptionRateKa: absorptionRateKa,
+                    bioavailability: bioavailability,
+                    weight: weight,
+                    calibrationFactor: calibrationFactor
+                )
+                
+                if conc > maxConc {
+                    maxConc = conc
+                    bestTime = t
+                }
+            }
+            
+            return bestTime
+        } else {
+            // One-compartment model with analytical solution
+            let tp = log(absorptionRateKa / ke) / (absorptionRateKa - ke)
+            return max(0, tp) // Ensure non-negative
+        }
+    }
+    
+    /// Calculate the maximum concentration for a given dose
+    /// - Parameters:
+    ///   - dose: Dose in mg
+    ///   - halfLifeDays: Half-life in days
+    ///   - absorptionRateKa: Absorption rate constant (ka) in d⁻¹
+    ///   - bioavailability: Fraction of drug absorbed (0-1)
+    ///   - weight: Patient weight in kg (for allometric scaling)
+    ///   - calibrationFactor: User-specific calibration factor
+    /// - Returns: Maximum concentration
+    func calculateMaxConcentration(
+        dose: Double,
+        halfLifeDays: Double,
+        absorptionRateKa: Double,
+        bioavailability: Double = 1.0,
+        weight: Double = 70.0,
+        calibrationFactor: Double = 1.0
+    ) -> Double {
+        // Calculate time to peak
+        let tp = calculateTimeToMaxConcentration(
+            dose: dose,
+            halfLifeDays: halfLifeDays,
+            absorptionRateKa: absorptionRateKa,
+            bioavailability: bioavailability,
+            weight: weight,
+            calibrationFactor: calibrationFactor
+        )
+        
+        // Calculate concentration at time to peak
+        return concentration(
+            at: tp,
+            dose: dose,
+            halfLifeDays: halfLifeDays,
+            absorptionRateKa: absorptionRateKa,
+            bioavailability: bioavailability,
+            weight: weight,
+            calibrationFactor: calibrationFactor
+        )
+    }
+    
+    /// Calculate the time to peak and maximum concentration for a blend
+    /// - Parameters:
+    ///   - components: Array of tuples containing (compound, dose)
+    ///   - route: Administration route
+    ///   - weight: Patient weight in kg
+    ///   - calibrationFactor: User-specific calibration factor
+    /// - Returns: Tuple containing (time to peak in days, max concentration)
+    func calculateBlendPeakDetails(
+        components: [(compound: Compound, doseMg: Double)],
+        route: Compound.Route,
+        weight: Double = 70.0,
+        calibrationFactor: Double = 1.0
+    ) -> (timeToMaxDays: Double, maxConcentration: Double) {
+        // For blends, we need to do a numerical search to find overall Tp and Cmax
+        // as different components will peak at different times
+        
+        // Search time range (0 to 30 days should cover most scenarios)
+        let searchEnd = 30.0
+        let step = 0.1 // Refine step size for better precision
+        
+        var maxConc = 0.0
+        var maxTime = 0.0
+        
+        for t in stride(from: 0, through: searchEnd, by: step) {
+            let conc = blendConcentration(
+                at: t,
+                components: components,
+                route: route,
+                weight: weight,
+                calibrationFactor: calibrationFactor
+            )
+            
+            if conc > maxConc {
+                maxConc = conc
+                maxTime = t
+            }
+        }
+        
+        return (timeToMaxDays: maxTime, maxConcentration: maxConc)
+    }
+    
+    /// Calculate peak details for a protocol (multiple injections)
+    /// - Parameters:
+    ///   - injectionDates: Dates of all injections
+    ///   - compounds: Array of tuples containing (compound, dose per injection)
+    ///   - route: Administration route
+    ///   - timeWindow: Date range to search for peak
+    ///   - weight: Patient weight in kg
+    ///   - calibrationFactor: User-specific calibration factor
+    /// - Returns: Tuple containing (peak date, max concentration)
+    func calculateProtocolPeakDetails(
+        injectionDates: [Date],
+        compounds: [(compound: Compound, dosePerInjectionMg: Double)],
+        route: Compound.Route,
+        timeWindow: (start: Date, end: Date),
+        weight: Double = 70.0,
+        calibrationFactor: Double = 1.0
+    ) -> (peakDate: Date, maxConcentration: Double) {
+        // For multiple injections, we need to search the entire time window
+        let totalHours = timeWindow.end.timeIntervalSince(timeWindow.start) / 3600
+        let step = 6.0 // 6-hour steps for reasonable precision
+        
+        var maxConc = 0.0
+        var maxDate = timeWindow.start
+        
+        // Generate timepoints to evaluate
+        var timePoints: [Date] = []
+        for hour in stride(from: 0, through: totalHours, by: step) {
+            let date = timeWindow.start.addingTimeInterval(hour * 3600)
+            timePoints.append(date)
+        }
+        
+        // Calculate concentrations at each timepoint
+        let concentrations = protocolConcentrations(
+            at: timePoints,
+            injectionDates: injectionDates,
+            compounds: compounds,
+            route: route,
+            weight: weight,
+            calibrationFactor: calibrationFactor
+        )
+        
+        // Find the maximum
+        for (index, conc) in concentrations.enumerated() {
+            if conc > maxConc {
+                maxConc = conc
+                maxDate = timePoints[index]
+            }
+        }
+        
+        return (peakDate: maxDate, maxConcentration: maxConc)
+    }
 } 

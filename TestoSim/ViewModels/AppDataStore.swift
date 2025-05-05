@@ -67,14 +67,67 @@ class AppDataStore: ObservableObject {
     
     private static func createDefaultProfile() -> UserProfile {
         var profile = UserProfile()
-        let defaultProtocol = InjectionProtocol(
-            name: "Default TRT",
+        
+        // Set up a complete test profile with realistic user data
+        profile.name = "Test User"
+        profile.unit = "ng/dL"
+        profile.calibrationFactor = 1.0
+        profile.dateOfBirth = Calendar.current.date(byAdding: .year, value: -35, to: Date())!
+        profile.heightCm = 175.0 // cm
+        profile.weight = 85.0 // kg
+        profile.biologicalSex = .male
+        profile.usesICloudSync = false
+        
+        // Add a variety of test protocols for different scenarios
+        
+        // 1. Standard TRT protocol (cypionate)
+        var defaultTRT = InjectionProtocol(
+            name: "Weekly Cypionate",
             ester: .cypionate,
             doseMg: 100.0,
             frequencyDays: 7.0,
-            startDate: Date()
+            startDate: Calendar.current.date(byAdding: .day, value: -60, to: Date())!,
+            notes: "Standard TRT protocol with weekly injections"
         )
-        profile.protocols.append(defaultProtocol)
+        
+        // Add some test blood samples to the protocol
+        defaultTRT.bloodSamples = [
+            BloodSample(
+                date: Calendar.current.date(byAdding: .day, value: -30, to: Date())!,
+                value: 650.0,
+                unit: "ng/dL"
+            ),
+            BloodSample(
+                date: Calendar.current.date(byAdding: .day, value: -15, to: Date())!,
+                value: 720.0,
+                unit: "ng/dL"
+            )
+        ]
+        
+        profile.protocols.append(defaultTRT)
+        
+        // 2. Split dose protocol (enanthate)
+        let splitDoseProtocol = InjectionProtocol(
+            name: "Split Dose Enanthate",
+            ester: .enanthate,
+            doseMg: 75.0,
+            frequencyDays: 3.5,
+            startDate: Calendar.current.date(byAdding: .day, value: -45, to: Date())!,
+            notes: "Split dose protocol for more stable levels"
+        )
+        profile.protocols.append(splitDoseProtocol)
+        
+        // 3. Propionate protocol (more frequent injections)
+        let propionateProtocol = InjectionProtocol(
+            name: "EOD Propionate",
+            ester: .propionate,
+            doseMg: 30.0,
+            frequencyDays: 2.0,
+            startDate: Calendar.current.date(byAdding: .day, value: -30, to: Date())!,
+            notes: "Every other day protocol with propionate"
+        )
+        profile.protocols.append(propionateProtocol)
+        
         return profile
     }
     
@@ -364,5 +417,185 @@ class AppDataStore: ObservableObject {
         }
         formatter.minimumFractionDigits = formatter.maximumFractionDigits // Ensure consistency
         return formatter.string(from: NSNumber(value: value)) ?? "\(value)"
+    }
+    
+    // MARK: - Peak Predictions
+    
+    /// Calculate the peak concentration and time for a protocol
+    /// - Parameters:
+    ///   - injectionProtocol: The protocol to analyze
+    /// - Returns: Tuple containing (peak date, max concentration)
+    func calculatePeakDetails(for injectionProtocol: InjectionProtocol) -> (peakDate: Date, maxConcentration: Double) {
+        // Start with legacy fallback
+        var compound: Compound?
+        var route = Compound.Route.intramuscular
+        
+        // Determine compound and route based on protocol type
+        switch injectionProtocol.protocolType {
+        case .legacyEster:
+            compound = compoundFromEster(injectionProtocol.ester)
+            
+        case .compound:
+            if let compoundID = injectionProtocol.compoundID {
+                compound = compoundLibrary.compound(withID: compoundID)
+            }
+            if let routeString = injectionProtocol.selectedRoute,
+               let selectedRoute = Compound.Route(rawValue: routeString) {
+                route = selectedRoute
+            }
+            
+        case .blend:
+            // For blends, we need the full blend components
+            if let blendID = injectionProtocol.blendID,
+               let blend = compoundLibrary.blend(withID: blendID) {
+                // Get the time window for evaluation
+                let timeWindow = (
+                    start: injectionProtocol.startDate,
+                    end: injectionProtocol.startDate.addingTimeInterval(simulationDurationDays * 24 * 3600)
+                )
+                
+                // Get all injection dates
+                let injectionDates = injectionProtocol.injectionDates(
+                    from: timeWindow.start,
+                    upto: timeWindow.end
+                )
+                
+                // Get resolved components with their compounds
+                let components = blend.resolvedComponents(using: compoundLibrary).map {
+                    (compound: $0.compound, dosePerInjectionMg: $0.mgPerML * injectionProtocol.doseMg / blend.totalConcentration)
+                }
+                
+                // Calculate peak details for the blend protocol
+                if let routeString = injectionProtocol.selectedRoute,
+                   let selectedRoute = Compound.Route(rawValue: routeString) {
+                    route = selectedRoute
+                }
+                
+                return pkModel.calculateProtocolPeakDetails(
+                    injectionDates: injectionDates,
+                    compounds: components,
+                    route: route,
+                    timeWindow: timeWindow,
+                    weight: profile.weight ?? 70.0,
+                    calibrationFactor: profile.calibrationFactor
+                )
+            }
+            
+            // If blend not found, try to fall back to ester
+            compound = compoundFromEster(injectionProtocol.ester)
+        }
+        
+        // If we don't have a valid compound, return zeros
+        guard let compound = compound else {
+            return (peakDate: injectionProtocol.startDate, maxConcentration: 0)
+        }
+        
+        // Get the time window for evaluation
+        let timeWindow = (
+            start: injectionProtocol.startDate,
+            end: injectionProtocol.startDate.addingTimeInterval(simulationDurationDays * 24 * 3600)
+        )
+        
+        // Get all injection dates
+        let injectionDates = injectionProtocol.injectionDates(
+            from: timeWindow.start,
+            upto: timeWindow.end
+        )
+        
+        // Create single compound array
+        let components = [(compound: compound, dosePerInjectionMg: injectionProtocol.doseMg)]
+        
+        // Calculate peak details using PKModel
+        return pkModel.calculateProtocolPeakDetails(
+            injectionDates: injectionDates,
+            compounds: components,
+            route: route,
+            timeWindow: timeWindow,
+            weight: profile.weight ?? 70.0,
+            calibrationFactor: profile.calibrationFactor
+        )
+    }
+    
+    /// Calculate the first peak concentration and time (after a single injection)
+    /// - Parameters:
+    ///   - injectionProtocol: The protocol to analyze
+    /// - Returns: Tuple containing (time to peak in days, max concentration)
+    func calculateSingleDosePeakDetails(for injectionProtocol: InjectionProtocol) -> (timeToMaxDays: Double, maxConcentration: Double) {
+        // Start with legacy fallback
+        var compound: Compound?
+        var route = Compound.Route.intramuscular
+        
+        // Determine compound and route based on protocol type
+        switch injectionProtocol.protocolType {
+        case .legacyEster:
+            compound = compoundFromEster(injectionProtocol.ester)
+            
+        case .compound:
+            if let compoundID = injectionProtocol.compoundID {
+                compound = compoundLibrary.compound(withID: compoundID)
+            }
+            if let routeString = injectionProtocol.selectedRoute,
+               let selectedRoute = Compound.Route(rawValue: routeString) {
+                route = selectedRoute
+            }
+            
+        case .blend:
+            // For blends, use the blend components
+            if let blendID = injectionProtocol.blendID,
+               let blend = compoundLibrary.blend(withID: blendID) {
+                
+                // Get resolved components with their compounds
+                let components = blend.resolvedComponents(using: compoundLibrary).map {
+                    (compound: $0.compound, doseMg: $0.mgPerML * injectionProtocol.doseMg / blend.totalConcentration)
+                }
+                
+                // Get appropriate route
+                if let routeString = injectionProtocol.selectedRoute,
+                   let selectedRoute = Compound.Route(rawValue: routeString) {
+                    route = selectedRoute
+                }
+                
+                // Calculate peak details for the blend
+                return pkModel.calculateBlendPeakDetails(
+                    components: components,
+                    route: route,
+                    weight: profile.weight ?? 70.0,
+                    calibrationFactor: profile.calibrationFactor
+                )
+            }
+            
+            // If blend not found, try to fall back to ester
+            compound = compoundFromEster(injectionProtocol.ester)
+        }
+        
+        // If we don't have a valid compound, return zeros
+        guard let compound = compound else {
+            return (timeToMaxDays: 0, maxConcentration: 0)
+        }
+        
+        // Get appropriate parameters from compound for selected route
+        let bioavailability = compound.defaultBioavailability[route] ?? 1.0
+        let absorptionRate = compound.defaultAbsorptionRateKa[route] ?? 0.7 // Default ka if not specified
+        
+        // Calculate using PKModel methods
+        let timeToMax = pkModel.calculateTimeToMaxConcentration(
+            dose: injectionProtocol.doseMg,
+            halfLifeDays: compound.halfLifeDays,
+            absorptionRateKa: absorptionRate,
+            bioavailability: bioavailability,
+            weight: profile.weight ?? 70.0,
+            calibrationFactor: profile.calibrationFactor
+        )
+        
+        let maxConc = pkModel.calculateMaxConcentration(
+            dose: injectionProtocol.doseMg,
+            halfLifeDays: compound.halfLifeDays,
+            absorptionRateKa: absorptionRate,
+            bioavailability: bioavailability,
+            weight: profile.weight ?? 70.0,
+            calibrationFactor: profile.calibrationFactor
+        )
+        
+        return (timeToMaxDays: timeToMax, maxConcentration: maxConc)
     }
 } 
