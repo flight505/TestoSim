@@ -100,3 +100,8 @@ iOSInjectionProject/
 
 # App specific
 memory.jsonl 
+.claude/
+.repomix/
+ai_docs/
+specs/
+
