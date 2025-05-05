@@ -121,7 +121,7 @@ extension InjectionProtocol {
                         if let extendedData = try JSONSerialization.jsonObject(with: jsonData, options: []) as? [String: String] {
                             // Extract properties
                             if let protocolTypeStr = extendedData["protocolType"], 
-                               let protocolType = ProtocolType(rawValue: protocolTypeStr) {
+                               let _ = ProtocolType(rawValue: protocolTypeStr) {
                                 // Protocol type will be set via computed property
                             }
                             

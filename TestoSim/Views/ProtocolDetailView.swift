@@ -30,16 +30,8 @@ struct ProtocolDetailView: View {
                 }
                 
                 // Chart
-                // TestosteroneChart(treatmentProtocol: injectionProtocol)
-                //    .frame(height: 300)
-                
-                // Temporary placeholder until chart compiler issues are resolved
-                Text("Chart temporarily disabled - compiler limitations")
+                TestosteroneChart(treatmentProtocol: injectionProtocol)
                     .frame(height: 300)
-                    .frame(maxWidth: .infinity)
-                    .background(Color.gray.opacity(0.2))
-                    .cornerRadius(8)
-                    .padding(.vertical)
                 
                 // Next injection information
                 nextInjectionView
@@ -80,6 +72,8 @@ struct ProtocolDetailView: View {
         }
         .onAppear {
             dataStore.selectProtocol(id: injectionProtocol.id)
+            // Check if the protocol needs a compound fix
+            fixProtocolCompound()
         }
     }
     
@@ -182,8 +176,31 @@ struct ProtocolDetailView: View {
                    let compound = dataStore.compoundLibrary.compound(withID: compoundID) {
                     compoundSummary(compound: compound)
                 } else {
-                    Text("Invalid compound selection")
-                        .foregroundColor(.red)
+                    // Fallback: Try to extract compound name from protocol name
+                    let esterNames = ["propionate", "phenylpropionate", "isocaproate", "enanthate", 
+                                     "cypionate", "decanoate", "undecanoate"]
+                    
+                    let foundEster = esterNames.first { ester in
+                        injectionProtocol.name.lowercased().contains(ester) ||
+                        (injectionProtocol.notes ?? "").lowercased().contains(ester)
+                    }
+                    
+                    if let esterName = foundEster,
+                       let compound = dataStore.compoundLibrary.compounds.first(where: { 
+                           $0.classType == .testosterone && 
+                           $0.ester?.lowercased() == esterName.lowercased() 
+                       }) {
+                        // Found a matching compound, show it
+                        compoundSummary(compound: compound)
+                        
+                        // This will be updated in onAppear
+                        Text("Protocol will be updated")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    } else {
+                        Text("Invalid compound selection")
+                            .foregroundColor(.red)
+                    }
                 }
                 
             case .blend:
@@ -250,8 +267,16 @@ struct ProtocolDetailView: View {
             if let notes = injectionProtocol.notes, !notes.isEmpty {
                 Text("Notes:")
                     .bold()
-                Text(notes)
-                    .fixedSize(horizontal: false, vertical: true)
+                
+                // Filter out the extended data JSON
+                let filteredNotes = notes.contains("---EXTENDED_DATA---") 
+                    ? notes.components(separatedBy: "---EXTENDED_DATA---").first?.trimmingCharacters(in: .whitespacesAndNewlines) 
+                    : notes
+                
+                if let filteredNotes = filteredNotes, !filteredNotes.isEmpty {
+                    Text(filteredNotes)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
         .padding()
@@ -409,6 +434,37 @@ struct ProtocolDetailView: View {
         }
         
         return ""
+    }
+    
+    // MARK: - Protocol Compound Auto-Fix
+    
+    private func fixProtocolCompound() {
+        // Only fix protocols that don't have compounds
+        if injectionProtocol.compoundID == nil {
+            let esterNames = ["propionate", "phenylpropionate", "isocaproate", "enanthate", 
+                             "cypionate", "decanoate", "undecanoate"]
+            
+            // Look for matching ester in name or notes
+            let foundEster = esterNames.first { ester in
+                injectionProtocol.name.lowercased().contains(ester) ||
+                (injectionProtocol.notes ?? "").lowercased().contains(ester)
+            }
+            
+            if let esterName = foundEster,
+               let compound = dataStore.compoundLibrary.compounds.first(where: { 
+                   $0.classType == .testosterone && 
+                   $0.ester?.lowercased() == esterName.lowercased() 
+               }) {
+                // Found a matching compound, update protocol
+                var updatedProtocol = injectionProtocol
+                updatedProtocol.compoundID = compound.id
+                updatedProtocol.selectedRoute = updatedProtocol.selectedRoute ?? 
+                                             Compound.Route.intramuscular.rawValue
+                
+                // Update protocol in datastore
+                dataStore.updateProtocol(updatedProtocol)
+            }
+        }
     }
 }
 

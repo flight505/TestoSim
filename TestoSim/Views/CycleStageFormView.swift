@@ -40,7 +40,7 @@ struct CycleStageFormView: View {
                         Text("Start Week")
                         Spacer()
                         Picker("Start Week", selection: $startWeek) {
-                            ForEach(0..<cycle.totalWeeks) { week in
+                            ForEach(Array(0..<cycle.totalWeeks), id: \.self) { week in
                                 Text("Week \(week + 1)").tag(week)
                             }
                         }
@@ -487,18 +487,6 @@ struct BlendPickerView: View {
                 }
             }
             .navigationTitle("Select Blend")
-        }
-    }
-}
-
-extension Compound {
-    var fullDisplayName: String {
-        let className = classType.rawValue.capitalized
-        
-        if let ester = ester {
-            return "\(className) \(ester.capitalized)"
-        } else {
-            return className
         }
     }
 } 

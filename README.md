@@ -136,13 +136,23 @@ The TestoSim app uses OpenAI's API for generating insights about hormone protoco
 
 When cloning this repository for development:
 
-1. The app uses a configuration file (`Config.xcconfig`) to store API keys
-2. A sample configuration file (`Config-Sample.xcconfig`) is included in the repository
-3. On first build, the sample file will be copied to `Config.xcconfig` if it doesn't exist
-4. You can optionally replace the placeholder value with your own OpenAI API key
+1. The app uses configuration files to store API keys:
+   - `Config.xcconfig` - For build-time configuration
+   - `Config.plist` - For runtime configuration
+   
+2. Sample files with placeholders are included in the repository:
+   - `Config-Sample.xcconfig`
+   - `Config-Sample.plist`
+   
+3. On first build, the script `copy-config.sh` will automatically copy the sample files to create the real config files if they don't exist.
+
+4. To set up your own API key:
+   - Open `TestoSim/Config.plist`
+   - Replace the placeholder value with your OpenAI API key
+   - Clean and rebuild the project
 
 ### Security Notes
 
-- The `Config.xcconfig` file is excluded from git in `.gitignore`
-- Users can toggle between using their own API key or the test API key in the AI Settings view
-- The app will validate API keys to ensure they're not placeholders before use 
+- Both `Config.xcconfig` and `Config.plist` are excluded from git in `.gitignore`
+- Users can toggle between using their own API key or the test API key in the AI settings
+- The API key is never stored directly in the source code

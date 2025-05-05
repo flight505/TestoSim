@@ -12,17 +12,19 @@ class OpenAIService {
     
     /// Test project API key with $20 spending limit (for test users)
     private var testApiKey: String {
-        // Read the API key from Info.plist
-        if let key = Bundle.main.object(forInfoDictionaryKey: "OPENAI_API_KEY") as? String {
-            if key.hasPrefix("_") {
-                // This is the sample placeholder value, log an error
-                print("WARNING: Using placeholder API key. Please provide a valid API key in Config.xcconfig.")
+        // Read the API key from Config.plist
+        if let path = Bundle.main.path(forResource: "Config", ofType: "plist"),
+           let dict = NSDictionary(contentsOfFile: path),
+           let key = dict["OPENAI_API_KEY"] as? String {
+            if key == "PLACEHOLDER_API_KEY" {
+                // This is the placeholder value, log an error
+                print("WARNING: Using placeholder API key. Please update Config.plist with a valid API key.")
                 return ""
             }
             return key
         }
         // Fallback if key not found
-        print("ERROR: API key not found in Info.plist.")
+        print("ERROR: API key not found in Config.plist.")
         return ""
     }
     

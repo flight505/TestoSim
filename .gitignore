@@ -107,4 +107,5 @@ specs/
 
 # API Keys
 TestoSim/Config.xcconfig
+TestoSim/Config.plist
 
