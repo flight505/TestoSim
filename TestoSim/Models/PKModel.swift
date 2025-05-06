@@ -6,10 +6,16 @@ struct PKModel {
     // MARK: - Constants
     
     /// Typical volume of distribution for a 70kg person in liters
-    static let defaultVolumeOfDistribution70kg: Double = 70.0 // L (corrected from 4.0)
+    static let defaultVolumeOfDistribution70kg: Double = 15.0 // L (corrected from 70.0, typical Vd for testosterone)
     
     /// Default clearance for a 70kg person in L/day
-    static let defaultClearance70kg: Double = 0.8 // L/day
+    static let defaultClearance70kg: Double = 2.4 // L/day (Updated based on literature)
+    
+    /// Endogenous testosterone production rate in mg/day for adult males
+    static let endogenousProductionRate: Double = 7.0 // mg/day
+    
+    /// Minimum reportable concentration to avoid numerical issues
+    static let minimumReportableConcentration: Double = 0.01
     
     // MARK: - Properties
     
@@ -21,16 +27,20 @@ struct PKModel {
     let k12: Double = 0.3 // d⁻¹
     let k21: Double = 0.15 // d⁻¹
     
+    /// Flag to include endogenous production in calculations
+    var includeEndogenousProduction: Bool = true
+    
     // MARK: - Initialization
     
-    init(useTwoCompartmentModel: Bool = true) {
+    init(useTwoCompartmentModel: Bool = true, includeEndogenousProduction: Bool = true) {
         // Always use two-compartment model, parameter kept for backward compatibility
         self.useTwoCompartmentModel = true
+        self.includeEndogenousProduction = includeEndogenousProduction
     }
     
     // MARK: - Concentration Calculations
     
-    /// Calculate concentration for a single dose administration
+    /// Calculate concentration for a single dose administration, including endogenous production
     /// - Parameters:
     ///   - time: Time in days since administration
     ///   - dose: Dose in mg
@@ -51,16 +61,25 @@ struct PKModel {
     ) -> Double {
         // Skip calculation if time is negative or zero
         guard time > 0 && halfLifeDays > 0 else { 
-            return 0 
+            return includeEndogenousProduction ? calculateBaselineConcentration(weight: weight) : 0
         }
         
         // Elimination rate constant (ke) = ln(2)/t_1/2
         let ke = log(2) / halfLifeDays
         
+        // Calculate clearance (CL) with allometric scaling
+        let clearance = PKModel.defaultClearance70kg * pow(weight / 70.0, 0.75) // Use 0.75 power for clearance
+        
+        // Calculate volume of distribution with allometric scaling
+        let vd = PKModel.defaultVolumeOfDistribution70kg * pow(weight / 70.0, 1.0)
+        
+        // Calculate baseline concentration (endogenous testosterone)
+        let baselineConcentration = includeEndogenousProduction ? calculateBaselineConcentration(weight: weight) : 0
+        
         // Skip calculation if ka ≤ ke (avoid division by zero or negative value)
         // Also skip two-compartment when ka is close to ke to avoid numerical instability
         if absorptionRateKa <= (ke * 1.05) {
-            return oneCompartmentBolus(
+            let exogenousConcentration = oneCompartmentBolus(
                 time: time,
                 dose: dose,
                 ke: ke,
@@ -68,10 +87,8 @@ struct PKModel {
                 weight: weight,
                 calibrationFactor: calibrationFactor
             )
+            return exogenousConcentration + baselineConcentration
         }
-        
-        // Calculate volume of distribution with allometric scaling
-        let vd = PKModel.defaultVolumeOfDistribution70kg * pow(weight / 70.0, 1.0)
         
         // Two-compartment model parameters
         // Using standard Bateman equation for PK with first-order absorption
@@ -81,16 +98,11 @@ struct PKModel {
         // α and β are the hybrid first-order rate constants
         let sum = k12 + k21 + ke
         let product = k21 * ke
-        let discriminant = sqrt(sum * sum - 4 * product)
         
-        let alpha = 0.5 * (sum + discriminant)
-        let beta = 0.5 * (sum - discriminant)
-        
-        // Prevent potential division by zero or very small denominators
-        // This can happen when rate constants are very close to each other
-        if abs(absorptionRateKa - alpha) < 0.001 || abs(absorptionRateKa - beta) < 0.001 || abs(alpha - beta) < 0.001 {
-            // Fall back to one-compartment model if the rate constants are too close
-            return oneCompartmentBolus(
+        // Check if discriminant will be positive to avoid numerical issues
+        guard sum * sum > 4 * product else {
+            // If discriminant would be negative, use one-compartment model
+            let oneCompResult = oneCompartmentBolus(
                 time: time,
                 dose: dose,
                 ke: ke,
@@ -98,6 +110,51 @@ struct PKModel {
                 weight: weight,
                 calibrationFactor: calibrationFactor
             )
+            return oneCompResult + baselineConcentration
+        }
+        
+        let discriminant = sqrt(sum * sum - 4 * product)
+        
+        // Special case handling for eigenvalues
+        let alpha: Double
+        let beta: Double
+        
+        if abs(k12 + ke - k21) < 0.001 {
+            // Handle special case where eigenvalues are very close
+            alpha = beta = (k12 + k21 + ke) / 2
+            
+            // Use one-compartment model for this special case
+            let oneCompResult = oneCompartmentBolus(
+                time: time,
+                dose: dose,
+                ke: ke,
+                bioavailability: bioavailability,
+                weight: weight,
+                calibrationFactor: calibrationFactor
+            )
+            return oneCompResult + baselineConcentration
+        } else {
+            // Standard calculation
+            alpha = 0.5 * (sum + discriminant)
+            beta = 0.5 * (sum - discriminant)
+        }
+        
+        // Prevent potential division by zero or very small denominators
+        // This can happen when rate constants are very close to each other
+        let epsilon = 0.001
+        if abs(absorptionRateKa - alpha) < epsilon || 
+           abs(absorptionRateKa - beta) < epsilon || 
+           abs(alpha - beta) < epsilon {
+            // Fall back to one-compartment model if the rate constants are too close
+            let oneCompResult = oneCompartmentBolus(
+                time: time,
+                dose: dose,
+                ke: ke,
+                bioavailability: bioavailability,
+                weight: weight,
+                calibrationFactor: calibrationFactor
+            )
+            return oneCompResult + baselineConcentration
         }
         
         // Calculate coefficients for the triexponential equation
@@ -106,18 +163,61 @@ struct PKModel {
         let C = k21 * absorptionRateKa / (vd * (absorptionRateKa - alpha) * (absorptionRateKa - beta))
         
         // Calculate concentration using the standard triexponential equation
-        let result = scaledDose * (
+        let exogenousConcentration = scaledDose * (
             A * (exp(-alpha * time)) +
             B * (exp(-beta * time)) +
             C * (exp(-absorptionRateKa * time))
         )
         
-        // Apply calibration factor
-        return max(0, result * calibrationFactor) // Ensure non-negative result
+        // Check for numerical issues
+        if exogenousConcentration.isNaN || exogenousConcentration.isInfinite {
+            // Log warning and use one-compartment model
+            print("Warning: Two-compartment model produced NaN/Infinite result. Parameters: ka=\(absorptionRateKa), ke=\(ke), k12=\(k12), k21=\(k21), Vd=\(vd)")
+            let oneCompResult = oneCompartmentBolus(
+                time: time,
+                dose: dose,
+                ke: ke,
+                bioavailability: bioavailability,
+                weight: weight,
+                calibrationFactor: calibrationFactor
+            )
+            return oneCompResult + baselineConcentration
+        }
+        
+        // Apply calibration factor to exogenous concentration only
+        let calibratedExogenousConcentration = max(0, exogenousConcentration * calibrationFactor)
+        
+        // Near-zero check
+        if calibratedExogenousConcentration < PKModel.minimumReportableConcentration {
+            print("Near-zero exogenous concentration calculated at time \(time): \(calibratedExogenousConcentration)")
+        }
+        
+        // Add exogenous (from injection) and endogenous (baseline) concentrations
+        return calibratedExogenousConcentration + baselineConcentration
+    }
+    
+    /// Calculate baseline testosterone concentration from endogenous production
+    /// - Parameter weight: Patient weight in kg
+    /// - Returns: Baseline concentration
+    private func calculateBaselineConcentration(weight: Double) -> Double {
+        // Calculate volume of distribution with allometric scaling
+        let vd = PKModel.defaultVolumeOfDistribution70kg * pow(weight / 70.0, 1.0)
+        
+        // Calculate clearance with allometric scaling
+        let clearance = PKModel.defaultClearance70kg * pow(weight / 70.0, 0.75)
+        
+        // For steady state, Concentration = Production Rate / Clearance
+        let baseConcentration = PKModel.endogenousProductionRate / clearance
+        
+        // Convert to concentration units (ng/dL)
+        // Assuming clearance is in L/day, we convert mg/L to ng/dL
+        // 1 mg/L = 100 ng/dL
+        return baseConcentration * 100
     }
     
     /// Calculate concentration for a bolus injection (immediate absorption)
     /// This is a fallback for when ka ≤ ke or as direct calculation when needed
+    /// Returns only the exogenous contribution (does NOT include baseline)
     private func oneCompartmentBolus(
         time: Double,
         dose: Double,
@@ -132,6 +232,14 @@ struct PKModel {
         // Simple one-compartment bolus model: C(t) = (F·D/Vd)·e^(-ke·t)
         let initialConcentration = (dose * bioavailability) / vd
         let result = initialConcentration * exp(-ke * time)
+        
+        // Apply log transformation for small values to avoid numerical issues
+        if result > 0 && result < PKModel.minimumReportableConcentration {
+            // Log-transform the calculation to avoid underflow
+            let logResult = log(initialConcentration) - ke * time
+            let transformedResult = exp(logResult)
+            return max(0, transformedResult * calibrationFactor)
+        }
         
         return max(0, result * calibrationFactor) // Ensure non-negative result
     }
@@ -151,12 +259,26 @@ struct PKModel {
         weight: Double = 70.0,
         calibrationFactor: Double = 1.0
     ) -> Double {
-        // Sum the concentrations of all components
-        return components.reduce(0.0) { totalConcentration, component in
+        guard !components.isEmpty else {
+            // If no components, return only baseline concentration
+            return includeEndogenousProduction ? calculateBaselineConcentration(weight: weight) : 0
+        }
+        
+        // For endogenous production, we should only add it once for the blend,
+        // not for each component, to avoid double-counting
+        let baselineConcentration = includeEndogenousProduction ? calculateBaselineConcentration(weight: weight) : 0
+        
+        // Create a copy of the current model with endogenous production turned off
+        // to avoid adding baseline multiple times
+        var tempModel = self
+        tempModel.includeEndogenousProduction = false
+        
+        // Sum the exogenous concentrations of all components
+        let totalExogenousConcentration = components.reduce(0.0) { totalConcentration, component in
             let bioavailability = component.compound.defaultBioavailability[route] ?? 1.0
             let absorptionRate = component.compound.defaultAbsorptionRateKa[route] ?? 0.7 // Default ka if not specified
             
-            let componentConcentration = concentration(
+            let componentConcentration = tempModel.concentration(
                 at: time,
                 dose: component.doseMg,
                 halfLifeDays: component.compound.halfLifeDays,
@@ -168,6 +290,9 @@ struct PKModel {
             
             return totalConcentration + componentConcentration
         }
+        
+        // Add baseline concentration once for the entire blend
+        return totalExogenousConcentration + baselineConcentration
     }
     
     /// Calculate the concentration over time for a protocol with multiple injections
@@ -188,26 +313,46 @@ struct PKModel {
         calibrationFactor: Double = 1.0
     ) -> [Double] {
         // Basic validation check
-        if times.isEmpty || injectionDates.isEmpty || compounds.isEmpty {
-            return Array(repeating: 0.0, count: times.count)
+        if times.isEmpty {
+            return []
         }
+        
+        if injectionDates.isEmpty || compounds.isEmpty {
+            // Return baseline concentrations if no injections or compounds
+            if includeEndogenousProduction {
+                let baselineConcentration = calculateBaselineConcentration(weight: weight)
+                return Array(repeating: baselineConcentration, count: times.count)
+            } else {
+                return Array(repeating: 0.0, count: times.count)
+            }
+        }
+        
+        // For endogenous production, we should only add baseline once per time point
+        let baselineConcentration = includeEndogenousProduction ? calculateBaselineConcentration(weight: weight) : 0
+        
+        // Create a copy of the model with endogenous production turned off to avoid double-counting
+        var tempModel = self
+        tempModel.includeEndogenousProduction = false
         
         // Calculate concentration at each time point
         let results = times.map { timePoint in
-            // Sum contributions from all injections
-            let totalConcentration = injectionDates.reduce(0.0) { totalConc, injectionDate in
+            // Sum contributions from all injections (exogenous only)
+            let totalExogenousConcentration = injectionDates.reduce(0.0) { totalConc, injectionDate in
                 // Skip future injections
                 guard injectionDate <= timePoint else { return totalConc }
                 
                 // Calculate time difference in days
                 let timeDiffDays = timePoint.timeIntervalSince(injectionDate) / (24 * 3600)
                 
+                // Skip negative time differences (should not happen, but just in case)
+                guard timeDiffDays >= 0 else { return totalConc }
+                
                 // Sum contributions from all compounds in this injection
                 let injectionContribution = compounds.reduce(0.0) { compoundSum, compound in
                     let bioavailability = compound.compound.defaultBioavailability[route] ?? 1.0
                     let absorptionRate = compound.compound.defaultAbsorptionRateKa[route] ?? 0.7
                     
-                    let contribution = concentration(
+                    let contribution = tempModel.concentration(
                         at: timeDiffDays,
                         dose: compound.dosePerInjectionMg,
                         halfLifeDays: compound.compound.halfLifeDays,
@@ -223,7 +368,8 @@ struct PKModel {
                 return totalConc + injectionContribution
             }
             
-            return totalConcentration
+            // Add baseline concentration once per time point
+            return totalExogenousConcentration + baselineConcentration
         }
         
         return results

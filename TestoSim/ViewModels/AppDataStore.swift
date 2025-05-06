@@ -103,7 +103,8 @@ class AppDataStore: ObservableObject {
     // MARK: - Helper: Create PK Model
     // Ensures the PK Model is created consistently with app settings
     private func createPKModel() -> PKModel {
-        return PKModel(useTwoCompartmentModel: true) // Always use two-compartment
+        // Always use two-compartment model with endogenous production included
+        return PKModel(useTwoCompartmentModel: true, includeEndogenousProduction: true)
     }
 
     // MARK: - Helper: Generate Simulation Dates
