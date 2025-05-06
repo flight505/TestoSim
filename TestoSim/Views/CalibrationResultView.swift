@@ -242,7 +242,7 @@ struct CalibrationResultView: View {
                         .frame(width: 50, height: 50)
                         .rotationEffect(.degrees(-90))
                     
-                    Text("\(Int(calibrationResults.rmseImprovement))%")
+                    Text("\(calibrationResults.rmseImprovement.isFinite ? Int(calibrationResults.rmseImprovement) : 0)%")
                         .font(.system(size: 12, weight: .bold))
                 }
             }

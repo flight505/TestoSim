@@ -33,40 +33,38 @@ struct InjectionProtocol: Identifiable, Codable {
         var current = startDate
         var injectionIndex = 0
         
-        // Find the first injection date that is on or after the simulation's start date
-        while current < simulationStartDate {
-            // Check for zero/negative frequency to avoid infinite loop
-            guard frequencyDays > 0 else {
-                // If first injection is before sim start, add it if it's the *only* injection
-                if injectionIndex == 0 && current <= endDate { dates.append(current) }
-                return dates // Only one injection possible
+        // Check for zero/negative frequency to avoid infinite loop
+        guard frequencyDays > 0 else {
+            // For zero/negative frequency, just include the start date if it's in range
+            if startDate <= endDate && startDate >= simulationStartDate {
+                dates.append(startDate)
             }
-            injectionIndex += 1
-            current = Calendar.current.date(byAdding: .day, value: Int(frequencyDays * Double(injectionIndex)), to: startDate)! // More robust date calculation
-            // Safety Break
-            if injectionIndex > 10000 { break }
+            return dates
         }
         
-        // Now add dates within the simulation range [simStartDate, endDate]
-        // Reset index based on where we are starting relative to protocol start
-        injectionIndex = Int(round(current.timeIntervalSince(startDate) / (frequencyDays * 24 * 3600)))
-        
-        while current <= endDate {
-            // Only add if it's within the simulation's actual display window start
-            if current >= simulationStartDate {
-                dates.append(current)
-            }
-            
-            // Check for zero/negative frequency
-            guard frequencyDays > 0 else { break } // Should only add the first one if freq <= 0
-            
-            injectionIndex += 1
-            // Use calendar calculation for adding days to avoid potential DST issues if frequency isn't integer days
-            // However, since frequency is Double, TimeInterval is more direct. Stick to TimeInterval for consistency with PK math.
+        // Calculate how many injections would have occurred before the simulation start
+        // by determining the injection index offset
+        if simulationStartDate > startDate {
+            let daysSinceStart = simulationStartDate.timeIntervalSince(startDate) / (24 * 3600)
+            injectionIndex = Int(floor(daysSinceStart / frequencyDays))
+            // Set current to the first injection that's on or after simulationStartDate
             current = startDate.addingTimeInterval(Double(injectionIndex) * frequencyDays * 24 * 3600)
-            // Safety Break
-            if injectionIndex > 10000 { break }
         }
+        
+        // Now add all injections from current date up to endDate
+        while current <= endDate {
+            dates.append(current)
+            
+            injectionIndex += 1
+            current = startDate.addingTimeInterval(Double(injectionIndex) * frequencyDays * 24 * 3600)
+            
+            // Safety break to prevent infinite loops
+            if injectionIndex > 10000 { 
+                print("Safety break in injection dates calculation")
+                break 
+            }
+        }
+        
         return dates
     }
 }

@@ -396,13 +396,6 @@ struct Compound: Identifiable, Codable, Hashable {
 
 With Stories 8-13 now complete, the application has all its core functional requirements implemented. The focus will now shift to:
 
-### Story 14 — UI/UX Polish & Animations
-The next step is to enhance the visual appeal and user experience of the application. This will include implementing smooth animations, improving visual consistency, optimizing the interface for accessibility, and adding delightful interactions to make the app more engaging.
-
-### Story 15 — Testing & Validation
-The final stage will focus on comprehensive testing of all features, validation of pharmacokinetic calculations against reference data, and ensuring the application performs well across different devices and scenarios.
-
-These remaining stories will complete the application's development cycle and prepare it for release.
 
 ---
 
@@ -410,14 +403,586 @@ These remaining stories will complete the application's development cycle and pr
 
 *Delightful & accessible.*
 
-* [ ] Follow **Apple HIG "Charting Data"** for uncluttered axes & call-outs ([Apple Developer][21])
-* [ ] Dashboard card shows *current level* + *days until next dose*; layout guided by NN/g pre-attentive dashboard rules ([Nielsen Norman Group][22])
-* [ ] **Adopt Swift Charts 2-D interactions** (scroll-zoom, selection marks)
-* [ ] **Animate curve reveal** – `.animation(.easeInOut(duration:1.2), value:dataStore.simulationData)`
-* [ ] **Add Lottie onboarding & success animations** (e.g., injection logged)
-  * Import via SPM `airbnb/lottie-ios` ([github.com][1])
-* [ ] **Haptics & sounds** when user records an injection
-* [ ] **Dark-mode friendly color palette** using semantic `Color` assets
+The next step is to enhance the visual appeal and user experience of the application. This will include implementing smooth animations, improving visual consistency, optimizing the interface for accessibility, and adding delightful interactions to make the app more engaging.
+
+
+## 1. Chart Component Architecture
+
+- [ ] Create a flexible `ChartContainer` component
+  - [ ] Implement time scale switching capabilities
+  - [ ] Add data aggregation functionality based on selected time scale
+  - [ ] Build state management for smooth transitions
+  - [ ] Implement progressive disclosure pattern with expandable views
+
+- [ ] Design component hierarchy with separation of concerns
+  - [ ] Build `TimeScaleSelector` component with options for '4-week', 'quarterly', 'all-time'
+  - [ ] Create `TestosteroneLineChart` for core visualization
+  - [ ] Implement `ReferenceRangeOverlay` to show normal ranges
+  - [ ] Add `InteractionLayer` for user selection and tooltips
+
+## 2. Time Scale Implementation
+
+- [ ] Build dedicated `TimeScaleManager` class
+  - [ ] Implement 4-week view with daily precision
+  - [ ] Create intermediate view (3-6 months) with weekly aggregation
+  - [ ] Design all-time view with monthly/quarterly aggregation
+  - [ ] Add trend highlighting for long-term views
+
+- [ ] Create smooth transitions between time scales
+  - [ ] Implement animation system for transitioning between scales (300-500ms duration)
+  - [ ] Maintain context when switching by keeping focal point consistent
+  - [ ] Add calculation for proper data aggregation based on scale
+  - [ ] Implement intelligent date formatting that adapts to each scale
+
+## 3. Dashboard Optimization with Pre-attentive Principles
+
+- [ ] Redesign dashboard layout following NN/g principles
+  - [ ] Place critical metrics in upper-left corner (current level and days until next dose)
+  - [ ] Group related metrics visually using consistent spacing and subtle backgrounds
+  - [ ] Implement clean information hierarchy with 5-7 key metrics maximum
+  - [ ] Create visual distinction between primary and secondary metrics
+
+- [ ] Optimize pre-attentive attributes
+  - [ ] Use length-based visualizations (bar charts) for comparing quantities
+  - [ ] Implement 2D position (line charts) for showing relationships over time
+  - [ ] Apply color strategically as secondary attribute for highlighting
+  - [ ] Create sufficient white space between information groups
+
+## 4. Chart Visualization Enhancement
+
+- [ ] Implement Apple HIG "Charting Data" principles
+  - [ ] Create uncluttered axes with minimal but sufficient gridlines
+  - [ ] Design clear call-outs for important data points
+  - [ ] Implement proper data range scaling to maximize visibility
+  - [ ] Add contextual information display around chart
+
+- [ ] Add Swift Charts 2D interactions
+  - [ ] Implement scroll-zoom functionality for exploring data
+  - [ ] Create selection marks for important data points
+  - [ ] Add pinch-to-zoom gesture support
+  - [ ] Implement double-tap to reset view
+
+## 5. Animation System
+
+- [ ] Create curve reveal animations
+  - [ ] Implement easeInOut animation for data presentation (1.2s duration)
+  - [ ] Create sequential animation for multi-dataset charts
+  - [ ] Add fade-in effects for chart elements (axes, labels, gridlines)
+  - [ ] Design visual transitions for data updates
+
+- [ ] Implement micro-animations for user feedback
+  - [ ] Create subtle animations for user interactions (150-200ms)
+  - [ ] Design feedback animations for selections and taps
+  - [ ] Implement loading states with branded skeleton screens
+  - [ ] Add subtle pulse animations for highlighting new data
+
+- [ ] Add celebration animations
+  - [ ] Design milestone celebration animations (800-1200ms)
+  - [ ] Create visual feedback for completing injections
+  - [ ] Implement progress celebrations for adherence achievements
+  - [ ] Design subtle success animations for data submissions
+
+## 6. Haptic and Sound Integration
+
+- [ ] Implement haptic feedback system
+  - [ ] Add light impact haptics for selections and navigation
+  - [ ] Design medium impact haptics for confirming injections
+  - [ ] Create notification haptics for reminders
+  - [ ] Implement success haptics for completed actions
+
+- [ ] Add sound design
+  - [ ] Create subtle sound effects for primary interactions
+  - [ ] Design success sounds for completed injections
+  - [ ] Implement notification sounds for reminders
+  - [ ] Add option to disable sounds in settings
+
+## 7. Visual Design System
+
+- [ ] Create focused color palette
+  - [ ] Implement primary palette with deep blues and teal accents
+  - [ ] Design accent colors (vibrant orange/red) for highlighting
+  - [ ] Create semantic color system (green for improvements, red for declines)
+  - [ ] Ensure proper contrast ratios for accessibility
+
+- [ ] Design typography system
+  - [ ] Implement SF Pro (iOS native) font family
+  - [ ] Create clear hierarchy with 2-3 weights
+  - [ ] Define consistent text sizes for different UI elements
+  - [ ] Ensure proper line height and letter spacing for readability
+
+- [ ] Build dark mode compatibility
+  - [ ] Create semantic color assets that adapt to light/dark mode
+  - [ ] Design dark mode variants of all UI components
+  - [ ] Adjust contrast and brightness appropriately for dark mode
+  - [ ] Test color combinations in both modes for accessibility
+
+## 8. Component Pattern Implementation
+
+- [ ] Create card-based organization system
+  - [ ] Design subtle shadows and rounded corners (consistent 8px or 12px radius)
+  - [ ] Implement proper elevation hierarchy (1-3 levels of cards)
+  - [ ] Create consistent internal padding (16px or 20px)
+  - [ ] Add subtle hover/press states for interactive cards
+
+- [ ] Build navigation patterns
+  - [ ] Implement bottom tab navigation for main sections
+  - [ ] Create floating action buttons for primary actions
+  - [ ] Design slide-up sheets for detailed information
+  - [ ] Add animation for navigation transitions
+
+- [ ] Define spacing system
+  - [ ] Create 8px increment-based spacing system
+  - [ ] Implement consistent margins between UI elements
+  - [ ] Design proper whitespace distribution
+  - [ ] Create balanced component density
+
+## 9. Nike-Inspired Visual Elements
+
+- [ ] Implement minimalist chart styling
+  - [ ] Create clean, thin chart lines with subtle animations
+  - [ ] Design ample white space around charts
+  - [ ] Add subtle gradient fills under trend lines
+  - [ ] Implement subtle grid lines that don't compete with data
+
+- [ ] Create performance zone visualization
+  - [ ] Design color-coded zones for different testosterone ranges
+  - [ ] Implement subtle background color bands for zones
+  - [ ] Add indicators for optimal ranges
+  - [ ] Create tooltips explaining each zone
+
+- [ ] Build consistent visual language
+  - [ ] Design unified icon system
+  - [ ] Create consistent corner radius across all elements
+  - [ ] Implement uniform shadow treatment
+  - [ ] Design consistent animation timing across UI
+
+## 10. Progressive Disclosure Implementation
+
+- [ ] Create layered information architecture
+  - [ ] Design summary views that expand to detailed charts
+  - [ ] Implement "Learn more" expansions for complex information
+  - [ ] Create hierarchy of importance for displayed metrics
+  - [ ] Build collapsible sections for detailed information
+
+- [ ] Implement interaction patterns for exploration
+  - [ ] Design clear affordances for expandable content
+  - [ ] Create smooth transitions for expanding/collapsing
+  - [ ] Add breadcrumbs for navigating complex data
+  - [ ] Implement information tooltips for advanced metrics
+
+## 11. Implementation Examples for Key Components
+
+### Current Level Dashboard Card
+
+- [ ] Create card design with:
+  - [ ] Large current testosterone level display (primary focus)
+  - [ ] Days until next dose countdown
+  - [ ] Small trend indicator showing change since last reading
+  - [ ] Subtle animation on value changes
+  - [ ] Tap interaction to expand to full chart
+
+```swift
+// Example structure for CurrentLevelCard
+struct CurrentLevelCard: View {
+    @ObservedObject var dataStore: AppDataStore
+    @State private var isExpanded = false
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // Header with current level
+            HStack {
+                Text("Current Level")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                Spacer()
+                // Trend indicator
+                TrendIndicator(change: dataStore.levelChange)
+            }
+            
+            // Primary value with large display
+            Text("\(formattedCurrentLevel) ng/dL")
+                .font(.system(size: 32, weight: .bold))
+                .foregroundColor(.primary)
+                .padding(.bottom, 4)
+            
+            // Days until next dose
+            HStack {
+                Image(systemName: "calendar.badge.clock")
+                    .foregroundColor(.accentColor)
+                Text("\(dataStore.daysUntilNextDose) days until next dose")
+                    .font(.callout)
+            }
+            
+            // Expand button
+            Button {
+                withAnimation(.spring()) {
+                    isExpanded.toggle()
+                }
+            } label: {
+                Text(isExpanded ? "Show less" : "Show chart")
+                    .font(.caption)
+                    .fontWeight(.medium)
+            }
+            .buttonStyle(.plain)
+            
+            // Expanded chart
+            if isExpanded {
+                TestosteroneChart(data: dataStore.recentLevels)
+                    .frame(height: 200)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color(.secondarySystemBackground))
+                .shadow(color: Color.primary.opacity(0.05), radius: 10, x: 0, y: 4)
+        )
+        .padding(.horizontal)
+    }
+    
+    private var formattedCurrentLevel: String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        return formatter.string(from: NSNumber(value: dataStore.currentLevel)) ?? "0"
+    }
+}
+```
+
+### Time Scale Selector with Transitions
+
+- [ ] Implement component with:
+  - [ ] Segmented control for time scale selection
+  - [ ] Smooth transitions between scales
+  - [ ] Visual indication of current scale
+  - [ ] Appropriate date range display
+
+```swift
+struct TimeScaleSelector: View {
+    @Binding var selectedTimeScale: TimeScale
+    @State private var isTransitioning = false
+    let onChange: (TimeScale) -> Void
+    
+    var body: some View {
+        VStack(spacing: 8) {
+            // Segmented control
+            Picker("Time Scale", selection: $selectedTimeScale) {
+                Text("4 Week").tag(TimeScale.fourWeek)
+                Text("Quarterly").tag(TimeScale.quarterly)
+                Text("All Time").tag(TimeScale.allTime)
+            }
+            .pickerStyle(.segmented)
+            .onChange(of: selectedTimeScale) { newScale in
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    isTransitioning = true
+                }
+                
+                // Allow time for animation to start
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                    onChange(newScale)
+                }
+                
+                // Reset transition state
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    isTransitioning = false
+                }
+            }
+            
+            // Date range display
+            Text(dateRangeText)
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .padding(.top, 4)
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 8)
+        .background(Color(.secondarySystemBackground).opacity(0.5))
+        .cornerRadius(8)
+    }
+    
+    private var dateRangeText: String {
+        switch selectedTimeScale {
+        case .fourWeek:
+            return "Last 28 days"
+        case .quarterly:
+            return "Last 3 months"
+        case .allTime:
+            return "Complete history"
+        }
+    }
+}
+
+enum TimeScale {
+    case fourWeek, quarterly, allTime
+}
+```
+
+### Testosterone Chart with Animations
+
+- [ ] Build chart with:
+  - [ ] Clean, minimal axes and gridlines
+  - [ ] Smooth curve animation on appearance
+  - [ ] Properly scaled y-axis for current data
+  - [ ] Reference range visualization
+  - [ ] Interaction support for data point selection
+
+```swift
+struct TestosteroneChart: View {
+    let data: [DataPoint]
+    @State private var showChart = false
+    @State private var selectedPoint: DataPoint?
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 24) {
+            // Chart title
+            Text("Testosterone Levels")
+                .font(.headline)
+                .padding(.horizontal)
+            
+            // Chart container
+            Chart {
+                // Reference range area
+                RectangleMark(
+                    xStart: .value("Start", data.first?.date ?? Date()),
+                    xEnd: .value("End", data.last?.date ?? Date()),
+                    yStart: .value("Min", 350),
+                    yEnd: .value("Max", 1000)
+                )
+                .foregroundStyle(Color.green.opacity(0.1))
+                .cornerRadius(4)
+                
+                // Data line
+                if showChart {
+                    LineMark(
+                        x: .value("Date", data.map { $0.date }),
+                        y: .value("Level", data.map { $0.level })
+                    )
+                    .lineStyle(StrokeStyle(lineWidth: 2.5))
+                    .foregroundStyle(Color.accentColor.gradient)
+                    .interpolationMethod(.catmullRom)
+                    
+                    // Data points
+                    ForEach(data) { point in
+                        PointMark(
+                            x: .value("Date", point.date),
+                            y: .value("Level", point.level)
+                        )
+                        .foregroundStyle(Color.accentColor)
+                        .symbolSize(point.id == selectedPoint?.id ? 120 : 60)
+                    }
+                }
+            }
+            .chartXAxis {
+                AxisMarks(values: .automatic) { value in
+                    AxisGridLine(centered: true, stroke: StrokeStyle(lineWidth: 0.5))
+                    AxisValueLabel() {
+                        if let date = value.as(Date.self) {
+                            Text(date.formatted(.dateTime.month(.abbreviated).day()))
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
+            }
+            .chartYAxis {
+                AxisMarks(position: .leading, values: .automatic) { value in
+                    AxisGridLine(centered: true, stroke: StrokeStyle(lineWidth: 0.5))
+                    AxisValueLabel() {
+                        if let level = value.as(Double.self) {
+                            Text("\(Int(level))")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
+            }
+            .frame(height: 220)
+            .padding(.horizontal, 8)
+            .padding(.bottom)
+            .onAppear {
+                // Animate chart appearance
+                withAnimation(.easeInOut(duration: 1.2)) {
+                    showChart = true
+                }
+            }
+            
+            // Selected point details
+            if let selectedPoint = selectedPoint {
+                HStack(spacing: 16) {
+                    VStack(alignment: .leading) {
+                        Text(selectedPoint.date.formatted(.dateTime.day().month().year()))
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                        Text("\(Int(selectedPoint.level)) ng/dL")
+                            .font(.title2)
+                            .fontWeight(.semibold)
+                    }
+                    
+                    Spacer()
+                    
+                    // Status indicator
+                    StatusIndicator(level: selectedPoint.level)
+                }
+                .padding()
+                .background(Color(.secondarySystemBackground))
+                .cornerRadius(12)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .chartOverlay { proxy in
+            GeometryReader { geometry in
+                Rectangle().fill(.clear).contentShape(Rectangle())
+                    .gesture(
+                        DragGesture()
+                            .onChanged { value in
+                                let x = value.location.x - geometry.frame(in: .local).minX
+                                if let (date, _) = proxy.value(atX: x),
+                                   let nearestPoint = findNearestPoint(to: date) {
+                                    selectedPoint = nearestPoint
+                                    HapticFeedback.selection.trigger()
+                                }
+                            }
+                    )
+            }
+        }
+    }
+    
+    private func findNearestPoint(to date: Date) -> DataPoint? {
+        guard !data.isEmpty else { return nil }
+        
+        return data.min(by: { abs($0.date.timeIntervalSince(date)) < abs($1.date.timeIntervalSince(date)) })
+    }
+}
+
+// Helper for haptic feedback
+enum HapticFeedback {
+    case selection, success, warning, error
+    
+    func trigger() {
+        switch self {
+        case .selection:
+            let generator = UISelectionFeedbackGenerator()
+            generator.prepare()
+            generator.selectionChanged()
+        case .success:
+            let generator = UINotificationFeedbackGenerator()
+            generator.prepare()
+            generator.notificationOccurred(.success)
+        case .warning:
+            let generator = UINotificationFeedbackGenerator()
+            generator.prepare()
+            generator.notificationOccurred(.warning)
+        case .error:
+            let generator = UINotificationFeedbackGenerator()
+            generator.prepare()
+            generator.notificationOccurred(.error)
+        }
+    }
+}
+
+// Status indicator component
+struct StatusIndicator: View {
+    let level: Double
+    
+    var body: some View {
+        HStack(spacing: 4) {
+            Circle()
+                .fill(statusColor)
+                .frame(width: 8, height: 8)
+            
+            Text(statusText)
+                .font(.caption)
+                .fontWeight(.medium)
+                .foregroundColor(statusColor)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(statusColor.opacity(0.1))
+        .cornerRadius(12)
+    }
+    
+    private var statusColor: Color {
+        if level < 300 {
+            return .red
+        } else if level < 350 {
+            return .orange
+        } else if level <= 1000 {
+            return .green
+        } else {
+            return .purple
+        }
+    }
+    
+    private var statusText: String {
+        if level < 300 {
+            return "Low"
+        } else if level < 350 {
+            return "Borderline"
+        } else if level <= 1000 {
+            return "Normal"
+        } else {
+            return "High"
+        }
+    }
+}
+```
+
+## 12. Animation and Transition Strategy
+
+- [ ] Define a consistent animation timing system
+  - [ ] Quick feedback: 150-200ms
+  - [ ] UI transitions: 300-500ms
+  - [ ] Progress celebrations: 800-1200ms
+  - [ ] Data visualizations: 1000-1500ms
+
+- [ ] Create a centralized animation manager
+  - [ ] Define standard curves for different interaction types
+  - [ ] Create consistent entry/exit animations for views
+  - [ ] Design staggered animations for related elements
+  - [ ] Implement spring animations for natural movements
+
+- [ ] Build celebration animation system
+  - [ ] Create success animations for completed injections
+  - [ ] Design milestone celebrations for adherence achievements
+  - [ ] Implement subtle progress indicators
+  - [ ] Add confetti or similar effects for major milestones
+
+
+## 14. Testing and Validation Plan
+
+- [ ] Define key test scenarios
+  - [ ] Verify time scale transitions work smoothly
+  - [ ] Test chart interactions on all supported devices
+  - [ ] Validate animations perform well on older devices
+  - [ ] Check accessibility with VoiceOver and Dynamic Type
+
+- [ ] Create visual regression testing
+  - [ ] Capture screenshots for baseline comparisons
+  - [ ] Test across different iOS versions and devices
+  - [ ] Verify dark mode compatibility
+  - [ ] Test dynamic type size variations
+
+- [ ] Performance testing
+  - [ ] Measure animation frame rates (target 60 FPS)
+  - [ ] Test with large datasets (1+ year of daily data)
+  - [ ] Verify memory usage during transitions
+  - [ ] Measure time to initial render for charts
+
+## 15. Documentation and Handoff
+
+- [ ] Create component documentation
+  - [ ] Document all custom UI components with usage examples
+  - [ ] Define animation timing and curve standards
+  - [ ] Document color palette and typography system
+  - [ ] Create spacing and layout guidelines
+
+- [ ] Build interactive prototypes
+  - [ ] Create working prototypes of key interactions
+  - [ ] Demonstrate animation timing and sequences
+  - [ ] Show time scale transitions
+  - [ ] Illustrate celebration animations
+
+This detailed checklist should provide a comprehensive guide for implementing the UI/UX enhancements described in the "Making TestoSim Shine" document. The checklist includes specific implementation details, code examples, and visual design specifications to help guide the development process.
 
 ---
 

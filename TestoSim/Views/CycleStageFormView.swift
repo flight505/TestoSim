@@ -308,7 +308,7 @@ struct CompoundItemRow: View {
                 .font(.headline)
             
             HStack {
-                Text("\(Int(item.doseMg))mg")
+                Text("\(item.doseMg.isFinite ? Int(item.doseMg) : 0)mg")
                 Spacer()
                 Text("Every \(formatFrequency(item.frequencyDays))")
             }
@@ -344,7 +344,7 @@ struct BlendItemRow: View {
                 .font(.headline)
             
             HStack {
-                Text("\(Int(item.doseMg))mg")
+                Text("\(item.doseMg.isFinite ? Int(item.doseMg) : 0)mg")
                 Spacer()
                 Text("Every \(formatFrequency(item.frequencyDays))")
             }
@@ -384,7 +384,7 @@ struct ItemConfigurationView: View {
             Form {
                 Section(header: Text("Dosage")) {
                     Stepper(value: $doseMg, in: 10...500, step: 10) {
-                        Text("Dose: \(Int(doseMg))mg")
+                        Text("Dose: \(doseMg.isFinite ? Int(doseMg) : 0)mg")
                     }
                 }
                 

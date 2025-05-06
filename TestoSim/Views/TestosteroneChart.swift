@@ -113,7 +113,7 @@ struct TestosteroneChart: View {
                 .chartYAxis {
                     AxisMarks(position: .leading, values: .automatic(desiredCount: 5)) { value in
                         let level = value.as(Double.self) ?? 0
-                        AxisValueLabel("\(Int(level))")
+                        AxisValueLabel("\(level.isFinite ? Int(level) : 0)")
                         AxisGridLine()
                     }
                 }
@@ -163,7 +163,7 @@ struct TestosteroneChart: View {
                     
                     Spacer()
                     
-                    Text("\(Int(selected.level)) \(dataStore.profile.unit)")
+                    Text("\(selected.level.isFinite ? Int(selected.level) : 0) \(dataStore.profile.unit)")
                         .font(.headline)
                         .foregroundColor(.blue)
                 }
@@ -189,10 +189,6 @@ struct TestosteroneChart: View {
         }
         
         // If no close point found, try to calculate directly
-        return dataStore.calculateLevel(
-            at: date,
-            for: treatmentProtocol,
-            using: dataStore.profile.calibrationFactor
-        )
+        return dataStore.predictedLevel(on: date, for: treatmentProtocol)
     }
 } 

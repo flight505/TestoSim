@@ -67,7 +67,7 @@ struct InjectionRecordRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("\(record.compoundOrBlendName) \(Int(record.doseMg))mg")
+                Text("\(record.compoundOrBlendName) \(record.doseMg.isFinite ? Int(record.doseMg) : 0)mg")
                     .font(.headline)
                 
                 Spacer()
@@ -172,7 +172,7 @@ struct InjectionAdherenceStatsView: View {
     
     var body: some View {
         VStack {
-            Text("Adherence Rate: \(Int(adherencePercentage))%")
+            Text("Adherence Rate: \(adherencePercentage.isFinite ? Int(adherencePercentage) : 0)%")
                 .font(.headline)
                 .padding(.bottom, 4)
             

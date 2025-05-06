@@ -72,6 +72,7 @@ struct ProtocolDetailView: View {
         }
         .onAppear {
             dataStore.selectProtocol(id: injectionProtocol.id)
+            dataStore.recalcSimulation()
             // Check if the protocol needs a compound fix
             fixProtocolCompound()
         }
@@ -364,11 +365,7 @@ struct ProtocolDetailView: View {
             }
             
             // Calculate the model's prediction for the same date
-            let modelPrediction = dataStore.calculateLevel(
-                at: sample.date,
-                for: injectionProtocol, 
-                using: dataStore.profile.calibrationFactor
-            )
+            let modelPrediction = dataStore.predictedLevel(on: sample.date, for: injectionProtocol)
             
             HStack {
                 Text("Model Prediction:")

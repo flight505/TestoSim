@@ -276,7 +276,7 @@ class AIInsightsGenerator: ObservableObject {
             insights.keyPoints.append(
                 KeyPoint(
                     title: "High level fluctuation",
-                    description: "Your current protocol results in approximately \(Int(fluctuation))% fluctuation between peak and trough levels, which may lead to inconsistent symptoms and effects.",
+                    description: "Your current protocol results in approximately \(fluctuation.isFinite ? Int(fluctuation) : 0)% fluctuation between peak and trough levels, which may lead to inconsistent symptoms and effects.",
                     type: .warning
                 )
             )
@@ -284,7 +284,7 @@ class AIInsightsGenerator: ObservableObject {
             insights.keyPoints.append(
                 KeyPoint(
                     title: "Stable hormone levels",
-                    description: "Your protocol achieves excellent stability with only \(Int(fluctuation))% fluctuation between peak and trough levels.",
+                    description: "Your protocol achieves excellent stability with only \(fluctuation.isFinite ? Int(fluctuation) : 0)% fluctuation between peak and trough levels.",
                     type: .positive
                 )
             )
@@ -297,7 +297,7 @@ class AIInsightsGenerator: ObservableObject {
             insights.keyPoints.append(
                 KeyPoint(
                     title: "Levels below typical target range",
-                    description: "Your average level of \(Int(avgLevel)) ng/dL is below the typical target range of \(Int(targetMin))-\(Int(targetMax)) ng/dL. Consider discussing a dosage adjustment with your healthcare provider.",
+                    description: "Your average level of \(avgLevel.isFinite ? Int(avgLevel) : 0) ng/dL is below the typical target range of \(targetMin.isFinite ? Int(targetMin) : 0)-\(targetMax.isFinite ? Int(targetMax) : 0) ng/dL. Consider discussing a dosage adjustment with your healthcare provider.",
                     type: .warning
                 )
             )
@@ -305,7 +305,7 @@ class AIInsightsGenerator: ObservableObject {
             insights.keyPoints.append(
                 KeyPoint(
                     title: "Levels above typical target range",
-                    description: "Your average level of \(Int(avgLevel)) ng/dL is above the typical target range of \(Int(targetMin))-\(Int(targetMax)) ng/dL. Consider discussing potential side effects and benefits with your healthcare provider.",
+                    description: "Your average level of \(avgLevel.isFinite ? Int(avgLevel) : 0) ng/dL is above the typical target range of \(targetMin.isFinite ? Int(targetMin) : 0)-\(targetMax.isFinite ? Int(targetMax) : 0) ng/dL. Consider discussing potential side effects and benefits with your healthcare provider.",
                     type: .warning
                 )
             )
@@ -313,7 +313,7 @@ class AIInsightsGenerator: ObservableObject {
             insights.keyPoints.append(
                 KeyPoint(
                     title: "Levels within typical target range",
-                    description: "Your average level of \(Int(avgLevel)) ng/dL falls within the typical target range of \(Int(targetMin))-\(Int(targetMax)) ng/dL.",
+                    description: "Your average level of \(avgLevel.isFinite ? Int(avgLevel) : 0) ng/dL falls within the typical target range of \(targetMin.isFinite ? Int(targetMin) : 0)-\(targetMax.isFinite ? Int(targetMax) : 0) ng/dL.",
                     type: .positive
                 )
             )
@@ -404,7 +404,7 @@ class AIInsightsGenerator: ObservableObject {
             insights.keyPoints.append(
                 KeyPoint(
                     title: "Very high peak levels",
-                    description: "This cycle produces a maximum concentration of \(Int(maxLevel)) ng/dL, which is significantly above the typical target range. Consider reducing dosages during peak periods.",
+                    description: "This cycle produces a maximum concentration of \(maxLevel.isFinite ? Int(maxLevel) : 0) ng/dL, which is significantly above the typical target range. Consider reducing dosages during peak periods.",
                     type: .warning
                 )
             )
@@ -412,7 +412,7 @@ class AIInsightsGenerator: ObservableObject {
             insights.keyPoints.append(
                 KeyPoint(
                     title: "Elevated peak levels",
-                    description: "This cycle produces a maximum concentration of \(Int(maxLevel)) ng/dL, which is above the typical target maximum of \(Int(targetMax)) ng/dL.",
+                    description: "This cycle produces a maximum concentration of \(maxLevel.isFinite ? Int(maxLevel) : 0) ng/dL, which is above the typical target maximum of \(targetMax.isFinite ? Int(targetMax) : 0) ng/dL.",
                     type: .warning
                 )
             )
@@ -463,7 +463,7 @@ class AIInsightsGenerator: ObservableObject {
             if let ester = component.compound.ester {
                 explanation += " \(ester)"
             }
-            explanation += " (\(Int(component.mgPerML)) mg/ml, approx. \(Int(percentage))%) - "
+            explanation += " (\(component.mgPerML.isFinite ? Int(component.mgPerML) : 0) mg/ml, approx. \(percentage.isFinite ? Int(percentage) : 0)%) - "
             
             // Describe the expected behavior
             if halfLife < 1.0 {

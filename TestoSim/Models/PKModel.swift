@@ -6,7 +6,7 @@ struct PKModel {
     // MARK: - Constants
     
     /// Typical volume of distribution for a 70kg person in liters
-    static let defaultVolumeOfDistribution70kg: Double = 4.0 // L
+    static let defaultVolumeOfDistribution70kg: Double = 70.0 // L (corrected from 4.0)
     
     /// Default clearance for a 70kg person in L/day
     static let defaultClearance70kg: Double = 0.8 // L/day
@@ -50,13 +50,16 @@ struct PKModel {
         calibrationFactor: Double = 1.0
     ) -> Double {
         // Skip calculation if time is negative or zero
-        guard time > 0 && halfLifeDays > 0 else { return 0 }
+        guard time > 0 && halfLifeDays > 0 else { 
+            return 0 
+        }
         
         // Elimination rate constant (ke) = ln(2)/t_1/2
         let ke = log(2) / halfLifeDays
         
         // Skip calculation if ka ≤ ke (avoid division by zero or negative value)
-        guard absorptionRateKa > ke else {
+        // Also skip two-compartment when ka is close to ke to avoid numerical instability
+        if absorptionRateKa <= (ke * 1.05) {
             return oneCompartmentBolus(
                 time: time,
                 dose: dose,
@@ -67,24 +70,50 @@ struct PKModel {
             )
         }
         
-        // Calculate volume of distribution and clearance with allometric scaling
+        // Calculate volume of distribution with allometric scaling
         let vd = PKModel.defaultVolumeOfDistribution70kg * pow(weight / 70.0, 1.0)
         
-        // Calculate alpha and beta for two-compartment model
-        let beta = 0.5 * ((k12 + k21 + ke) - sqrt(pow(k12 + k21 + ke, 2) - 4 * k21 * ke))
-        let _ = (k21 * ke) / beta
-        
-        // Two-compartment model with first-order absorption
+        // Two-compartment model parameters
+        // Using standard Bateman equation for PK with first-order absorption
         let scaledDose = dose * bioavailability
-        let term1 = absorptionRateKa / ((absorptionRateKa - beta) * (absorptionRateKa - beta))
-        let term2 = absorptionRateKa / ((beta - absorptionRateKa) * (beta - beta))
         
-        let result = (scaledDose / vd) * (
-            term1 * exp(-absorptionRateKa * time) +
-            term2 * exp(-beta * time)
+        // Calculate hybrid rate constants for two-compartment model
+        // α and β are the hybrid first-order rate constants
+        let sum = k12 + k21 + ke
+        let product = k21 * ke
+        let discriminant = sqrt(sum * sum - 4 * product)
+        
+        let alpha = 0.5 * (sum + discriminant)
+        let beta = 0.5 * (sum - discriminant)
+        
+        // Prevent potential division by zero or very small denominators
+        // This can happen when rate constants are very close to each other
+        if abs(absorptionRateKa - alpha) < 0.001 || abs(absorptionRateKa - beta) < 0.001 || abs(alpha - beta) < 0.001 {
+            // Fall back to one-compartment model if the rate constants are too close
+            return oneCompartmentBolus(
+                time: time,
+                dose: dose,
+                ke: ke,
+                bioavailability: bioavailability,
+                weight: weight,
+                calibrationFactor: calibrationFactor
+            )
+        }
+        
+        // Calculate coefficients for the triexponential equation
+        let A = (alpha - k21) * absorptionRateKa / (vd * (alpha - beta) * (absorptionRateKa - alpha))
+        let B = (beta - k21) * absorptionRateKa / (vd * (beta - alpha) * (absorptionRateKa - beta))
+        let C = k21 * absorptionRateKa / (vd * (absorptionRateKa - alpha) * (absorptionRateKa - beta))
+        
+        // Calculate concentration using the standard triexponential equation
+        let result = scaledDose * (
+            A * (exp(-alpha * time)) +
+            B * (exp(-beta * time)) +
+            C * (exp(-absorptionRateKa * time))
         )
         
-        return result * calibrationFactor
+        // Apply calibration factor
+        return max(0, result * calibrationFactor) // Ensure non-negative result
     }
     
     /// Calculate concentration for a bolus injection (immediate absorption)
@@ -102,7 +131,9 @@ struct PKModel {
         
         // Simple one-compartment bolus model: C(t) = (F·D/Vd)·e^(-ke·t)
         let initialConcentration = (dose * bioavailability) / vd
-        return initialConcentration * exp(-ke * time) * calibrationFactor
+        let result = initialConcentration * exp(-ke * time)
+        
+        return max(0, result * calibrationFactor) // Ensure non-negative result
     }
     
     /// Calculate the total concentration for a blend at a specific time
@@ -156,8 +187,13 @@ struct PKModel {
         weight: Double = 70.0,
         calibrationFactor: Double = 1.0
     ) -> [Double] {
+        // Basic validation check
+        if times.isEmpty || injectionDates.isEmpty || compounds.isEmpty {
+            return Array(repeating: 0.0, count: times.count)
+        }
+        
         // Calculate concentration at each time point
-        return times.map { timePoint in
+        let results = times.map { timePoint in
             // Sum contributions from all injections
             let totalConcentration = injectionDates.reduce(0.0) { totalConc, injectionDate in
                 // Skip future injections
@@ -189,6 +225,8 @@ struct PKModel {
             
             return totalConcentration
         }
+        
+        return results
     }
     
     // MARK: - Bayesian Calibration
