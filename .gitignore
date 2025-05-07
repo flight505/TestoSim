@@ -99,8 +99,7 @@ iOSInjectionProject/
 .cursor/
 
 # App specific
-memory.jsonl 
-.claude/
+memory.jsonl
 .repomix/
 ai_docs/
 specs/
@@ -109,3 +108,7 @@ specs/
 TestoSim/Config.xcconfig
 TestoSim/Config.plist
 
+
+**/.claude/settings.local.json
+
+**/CLAUDE.local.md

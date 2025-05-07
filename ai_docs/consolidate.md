@@ -307,6 +307,78 @@ Throughout the implementation process, the following testing milestones should b
 - Focused on model and UI implementation over performance optimization and accessibility
 - Combined detail views with editing interfaces in the TreatmentFormView
 
+## Implementation Issues Encountered
+
+1. **Type Mismatch Issues**: 
+   - Several type mismatches between `CycleCompoundItem`/`CycleBlendItem` and `Treatment.StageCompound`/`Treatment.StageBlend`
+   - Required adding conversion methods between the legacy and new model types
+   - Issue in `CycleStageFormView.swift` where legacy types were being used without conversion
+
+2. **Immutable Property Issues**:
+   - `treatmentType` in the `Treatment` model was initially defined as `let` but needed to be `var` to allow modifications
+   - This was causing compilation errors in code trying to change the treatment type
+
+3. **Optional Handling Issues**:
+   - In `AppDataStore.swift`, `findCompoundForTreatment` method had incorrect optional handling for blend components
+   - VialBlend.Component.compoundID is non-optional but was being treated as optional
+   - This caused build errors with the error message: "initializer for conditional binding must have Optional type, not 'UUID'"
+
+4. **Unused Variable Warnings**:
+   - In `generateVisualizationForTreatment` method, there were unused variables causing warnings
+   - Fixed by using underscore notation for bindings needed for validation but not direct use
+
+5. **Interface Consistency Issues**:
+   - Inconsistent interface between legacy models and unified model requiring adapter methods
+   - Some methods expected legacy types while unified model implementation provided new types
+
+6. **Core Data Integration Challenges**:
+   - Some CoreData entity relationships not fully defined for proper migration
+   - Incomplete Core Data configuration for progressive migration
+
+## Unified Model Transition Checklist
+
+To ensure complete transition to the unified Treatment model, all the following criteria must be met:
+
+1. **Code Compilation**:
+   - [x] App builds without errors
+   - [ ] App builds without type deprecation warnings
+
+2. **Model Transition**:
+   - [x] Treatment model fully implements all required functionality
+   - [x] Conversion methods between legacy and new models implemented
+   - [ ] Complete replacement of legacy model usage in ViewModels
+   - [ ] Complete replacement of legacy model usage in Views
+   - [ ] All test cases updated to use unified model
+
+3. **Data Persistence**:
+   - [x] CoreData schema includes Treatment entity
+   - [x] Save/load operations for Treatments working
+   - [ ] Migration from legacy data complete and tested
+   - [ ] Performance verified with large datasets
+
+4. **User Interface**:
+   - [x] TreatmentListView functional
+   - [x] TreatmentFormView functional
+   - [x] TreatmentVisualizationView functional
+   - [x] Basic layer controls implemented
+   - [ ] All UI elements fully integrated with unified model
+   - [ ] No usage of legacy types in UI code
+
+5. **Feature Parity**:
+   - [x] All features available in legacy system implemented in unified model
+   - [ ] New features (layer ordering, comparisons) implemented
+   - [ ] Performance meets or exceeds legacy implementation
+
+6. **Legacy Code Cleanup Readiness Checklist**:
+   - [ ] **All** usages of InjectionProtocol replaced with Treatment(.simple)
+   - [ ] **All** usages of Cycle replaced with Treatment(.advanced)
+   - [ ] **All** unit tests passing with unified model
+   - [ ] No console warnings related to model deprecation
+   - [ ] UI tests passing with unified model
+   - [ ] No performance regressions
+
+When all items in the "Legacy Code Cleanup Readiness Checklist" are complete, we can proceed with removing deprecated code, eliminating adapters, and cleaning up the codebase.
+
 ## Completed Features
 
 1. ✅ Unified Treatment model that consolidates Protocols and Cycles
@@ -320,16 +392,80 @@ Throughout the implementation process, the following testing milestones should b
 
 ## Next Steps
 
-1. Integrate with actual charting library for visualization
-2. Implement touch interaction handling for visualization
-3. Add performance optimization for large datasets
-4. Implement accessibility features
-5. Complete system testing for production readiness
-6. Add in-app guidance for the new model
-7. Prepare for deployment
+1. **Complete legacy code replacement**:
+   - Identify and replace all remaining usages of InjectionProtocol with Treatment(.simple)
+   - Identify and replace all remaining usages of Cycle with Treatment(.advanced)
+   - Add @available(*, deprecated) annotations to all legacy types to help identify usage
+
+2. **Implement remaining UI components**:
+   - Finish layer ordering UI in TreatmentVisualizationView
+   - Implement time range selector for visualizations
+   - Add compound selector with visual previews
+
+3. **Data migration and testing**:
+   - Complete Core Data migration configuration for progressive migration
+   - Test migration of real user data sets
+   - Optimize queries for larger treatment libraries
+
+4. **Fix deprecation warnings**:
+   - Systematically address all deprecation warnings in the codebase
+   - Start from model layer and work outward to UI components
+   - Use TodoRead/TodoWrite to keep track of progress
+
+5. **Performance and optimization**:
+   - Add performance optimization for large datasets
+   - Implement visualization optimizations for smooth rendering
+   - Test with realistic data volumes
+
+6. **Cleanup and finalization**:
+   - Remove all adapter/bridge code once direct usage of unified model is complete
+   - Remove all legacy models and related infrastructure
+   - Clean up imports and unused code
+   - Final testing pass with all legacy code removed
+
+7. **User experience and deployment**:
+   - Add in-app guidance for the new unified model
+   - Prepare user migration documentation
+   - Prepare for deployment
+
+## Transition Strategy for Removing Legacy Code
+
+To safely remove legacy code after completing the transition, follow this ordered approach:
+
+1. **Apply Deprecation Annotations** *(Transitional Phase)*:
+   - Add `@available(*, deprecated, message: "Use Treatment with treatmentType = .simple instead")` to InjectionProtocol
+   - Add `@available(*, deprecated, message: "Use Treatment with treatmentType = .advanced instead")` to Cycle
+   - Add similar annotations to all related legacy types and extension methods
+   - Build and note all deprecation warnings
+
+2. **Replace Code Module-by-Module** *(Systematic Replacement)*:
+   - Start with Core Data and model layers
+   - Move to ViewModels
+   - Finally update all UI components
+   - For each file, ensure all tests pass after changes
+
+3. **Verification Testing** *(Pre-Removal Validation)*:
+   - Ensure all unit tests are updated to use unified model and pass
+   - Validate that the application builds with no deprecation warnings
+   - Test all user flows thoroughly
+   - Perform regression testing
+
+4. **Legacy Removal** *(Final Cleanup)*:
+   - Remove all legacy types (InjectionProtocol, Cycle, etc.)
+   - Remove adapter/bridge code
+   - Remove transitional methods or extensions
+   - Clean up imports and unused code
+
+5. **Final Verification** *(Post-Removal Validation)*:
+   - Ensure application builds with no errors or warnings
+   - Run full test suite
+   - Perform UI testing on all affected screens
+   - Validate performance meets requirements
 
 ## Conclusion
 
-This implementation checklist provides a comprehensive roadmap for refactoring TestoSim to implement a unified treatment model and multi-layered visualization approach. By following this systematic approach and adhering to the testing milestones, the development team can successfully complete this significant architectural change while maintaining application stability and enhancing the user experience.
+This implementation checklist and transition strategy provide a comprehensive roadmap for refactoring TestoSim to implement a unified treatment model and multi-layered visualization approach. By following this systematic approach and adhering to the testing milestones, we can successfully complete this significant architectural change while maintaining application stability and enhancing the user experience.
 
 The refactored application will provide a more intuitive model for users by consolidating related concepts into a unified treatment approach, while also offering sophisticated visualization capabilities that enhance understanding of compound effects and interactions.
+
+The issues encountered during implementation highlight the importance of careful type design, proper handling of optionals, and maintaining interface consistency when transitioning between legacy and new model architectures. These learnings can be applied to future refactoring efforts to ensure smoother transitions.

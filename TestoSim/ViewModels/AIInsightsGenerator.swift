@@ -30,22 +30,22 @@ class AIInsightsGenerator: ObservableObject {
     
     // MARK: - Public Methods
     
-    /// Generate insights for a specific protocol
+    /// Generate insights for a treatment
     /// - Parameters:
-    ///   - protocol: The protocol to analyze
+    ///   - treatment: The treatment to analyze
     ///   - profile: User profile data
     ///   - simulationData: Simulation data points
     ///   - compoundLibrary: Reference to compound library
     ///   - forceRefresh: Whether to force a refresh instead of using cached insights
     func generateInsights(
-        for treatmentProtocol: InjectionProtocol,
+        for treatment: Treatment,
         profile: UserProfile,
         simulationData: [DataPoint],
         compoundLibrary: CompoundLibrary,
         forceRefresh: Bool = false
     ) {
         // Check cache first unless refresh is forced
-        if !forceRefresh, let cachedInsights = insightsCache[treatmentProtocol.id] {
+        if !forceRefresh, let cachedInsights = insightsCache[treatment.id] {
             self.latestInsights = cachedInsights
             return
         }
@@ -53,11 +53,21 @@ class AIInsightsGenerator: ObservableObject {
         isLoading = true
         error = nil
         
+        // Ensure this is a simple treatment
+        guard treatment.treatmentType == .simple else {
+            // For advanced treatments, use the advanced version
+            if treatment.treatmentType == .advanced {
+                generateAdvancedTreatmentInsights(for: treatment, profile: profile, simulationData: simulationData, compoundLibrary: compoundLibrary)
+            }
+            return
+        }
+        
         // Check if OpenAI API key is available
         if openAIService.hasAPIKey() {
             // Use OpenAI service for real insights
-            openAIService.generateProtocolInsights(
-                treatmentProtocol: treatmentProtocol,
+            // OpenAIService now supports the unified Treatment model directly
+            openAIService.generateInsights(
+                for: treatment,
                 profile: profile,
                 simulationData: simulationData,
                 compoundLibrary: compoundLibrary
@@ -70,29 +80,91 @@ class AIInsightsGenerator: ObservableObject {
                     switch result {
                     case .success(let insights):
                         // Cache the insights
-                        self.insightsCache[treatmentProtocol.id] = insights
+                        self.insightsCache[treatment.id] = insights
                         self.latestInsights = insights
                         
                     case .failure(let error):
                         self.error = error
                         // Fall back to mock insights if API call fails
-                        self.generateMockInsights(for: treatmentProtocol, profile: profile, simulationData: simulationData, compoundLibrary: compoundLibrary)
+                        self.generateMockInsights(for: treatment, profile: profile, simulationData: simulationData, compoundLibrary: compoundLibrary)
                     }
                 }
             }
         } else {
             // Use mock implementation when API key is not available
-            generateMockInsights(for: treatmentProtocol, profile: profile, simulationData: simulationData, compoundLibrary: compoundLibrary)
+            generateMockInsights(for: treatment, profile: profile, simulationData: simulationData, compoundLibrary: compoundLibrary)
         }
     }
     
-    /// Generate insights for a cycle
+    /// Generate insights for an advanced treatment (previously known as cycle)
     /// - Parameters:
-    ///   - cycle: The cycle to analyze
+    ///   - treatment: The advanced treatment to analyze
     ///   - profile: User profile data
-    ///   - simulationData: Cycle simulation data points
+    ///   - simulationData: Treatment simulation data points
     ///   - compoundLibrary: Reference to compound library
     ///   - forceRefresh: Whether to force a refresh instead of using cached insights
+    func generateAdvancedTreatmentInsights(
+        for treatment: Treatment,
+        profile: UserProfile,
+        simulationData: [DataPoint],
+        compoundLibrary: CompoundLibrary,
+        forceRefresh: Bool = false
+    ) {
+        // Ensure this is an advanced treatment
+        guard treatment.treatmentType == .advanced else {
+            // For simple treatments, use the simple version
+            if treatment.treatmentType == .simple {
+                generateInsights(for: treatment, profile: profile, simulationData: simulationData, compoundLibrary: compoundLibrary)
+            }
+            return
+        }
+        
+        // Check cache first unless refresh is forced
+        if !forceRefresh, let cachedInsights = insightsCache[treatment.id] {
+            self.latestInsights = cachedInsights
+            return
+        }
+        
+        isLoading = true
+        error = nil
+        
+        // Check if OpenAI API key is available
+        if openAIService.hasAPIKey() {
+            // Use OpenAI service for real insights
+            // OpenAIService now supports the unified Treatment model directly
+            openAIService.generateAdvancedTreatmentInsights(
+                for: treatment,
+                profile: profile,
+                simulationData: simulationData,
+                compoundLibrary: compoundLibrary
+            ) { [weak self] result in
+                DispatchQueue.main.async {
+                    guard let self = self else { return }
+                    
+                    self.isLoading = false
+                    
+                    switch result {
+                    case .success(let insights):
+                        // Cache the insights
+                        self.insightsCache[treatment.id] = insights
+                        self.latestInsights = insights
+                        
+                    case .failure(let error):
+                        self.error = error
+                        // Fall back to mock insights if API call fails
+                        self.generateMockAdvancedTreatmentInsights(for: treatment, profile: profile, simulationData: simulationData, compoundLibrary: compoundLibrary)
+                    }
+                }
+            }
+        } else {
+            // Use mock implementation when API key is not available
+            generateMockAdvancedTreatmentInsights(for: treatment, profile: profile, simulationData: simulationData, compoundLibrary: compoundLibrary)
+        }
+    }
+    
+    // Legacy method for backward compatibility
+    // This will be removed once all code is migrated to the unified model
+    @available(*, deprecated, message: "Use generateAdvancedTreatmentInsights instead")
     func generateCycleInsights(
         for cycle: Cycle,
         profile: UserProfile,
@@ -100,46 +172,17 @@ class AIInsightsGenerator: ObservableObject {
         compoundLibrary: CompoundLibrary,
         forceRefresh: Bool = false
     ) {
-        // Check cache first unless refresh is forced
-        if !forceRefresh, let cachedInsights = insightsCache[cycle.id] {
-            self.latestInsights = cachedInsights
-            return
-        }
+        // Convert legacy cycle to unified Treatment
+        let treatment = Treatment(from: cycle)
         
-        isLoading = true
-        error = nil
-        
-        // Check if OpenAI API key is available
-        if openAIService.hasAPIKey() {
-            // Use OpenAI service for real insights
-            openAIService.generateCycleInsights(
-                cycle: cycle,
-                profile: profile,
-                simulationData: simulationData,
-                compoundLibrary: compoundLibrary
-            ) { [weak self] result in
-                DispatchQueue.main.async {
-                    guard let self = self else { return }
-                    
-                    self.isLoading = false
-                    
-                    switch result {
-                    case .success(let insights):
-                        // Cache the insights
-                        self.insightsCache[cycle.id] = insights
-                        self.latestInsights = insights
-                        
-                    case .failure(let error):
-                        self.error = error
-                        // Fall back to mock insights if API call fails
-                        self.generateMockCycleInsights(for: cycle, profile: profile, simulationData: simulationData, compoundLibrary: compoundLibrary)
-                    }
-                }
-            }
-        } else {
-            // Use mock implementation when API key is not available
-            generateMockCycleInsights(for: cycle, profile: profile, simulationData: simulationData, compoundLibrary: compoundLibrary)
-        }
+        // Use the new method
+        generateAdvancedTreatmentInsights(
+            for: treatment,
+            profile: profile,
+            simulationData: simulationData,
+            compoundLibrary: compoundLibrary,
+            forceRefresh: forceRefresh
+        )
     }
     
     /// Clear all cached insights
@@ -162,72 +205,137 @@ class AIInsightsGenerator: ObservableObject {
     
     // MARK: - Private Methods
     
-    /// Mock implementation for generating insights
+    /// Mock implementation for generating insights for simple treatments
+    private func generateMockInsights(
+        for treatment: Treatment,
+        profile: UserProfile,
+        simulationData: [DataPoint],
+        compoundLibrary: CompoundLibrary
+    ) {
+        // Ensure this is a simple treatment
+        guard treatment.treatmentType == .simple else {
+            // For advanced treatments, use the advanced version
+            if treatment.treatmentType == .advanced {
+                generateMockAdvancedTreatmentInsights(for: treatment, profile: profile, simulationData: simulationData, compoundLibrary: compoundLibrary)
+            }
+            return
+        }
+        
+        // Simulate network delay
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+            guard let self = self else { return }
+            
+            // Create mock insights based on treatment type
+            let insights = self.createMockInsightsForSimpleTreatment(treatment, profile: profile, simulationData: simulationData, compoundLibrary: compoundLibrary)
+            
+            // Cache the insights
+            self.insightsCache[treatment.id] = insights
+            
+            // Update published properties
+            self.latestInsights = insights
+            self.isLoading = false
+        }
+    }
+    
+    /// Mock implementation for generating advanced treatment insights
+    private func generateMockAdvancedTreatmentInsights(
+        for treatment: Treatment,
+        profile: UserProfile,
+        simulationData: [DataPoint],
+        compoundLibrary: CompoundLibrary
+    ) {
+        // Ensure this is an advanced treatment
+        guard treatment.treatmentType == .advanced else {
+            // For simple treatments, use the simple version
+            if treatment.treatmentType == .simple {
+                generateMockInsights(for: treatment, profile: profile, simulationData: simulationData, compoundLibrary: compoundLibrary)
+            }
+            return
+        }
+        
+        // Simulate network delay
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
+            guard let self = self else { return }
+            
+            // Create mock insights for the advanced treatment
+            let insights = self.createMockInsightsForAdvancedTreatment(treatment, profile: profile, simulationData: simulationData, compoundLibrary: compoundLibrary)
+            
+            // Cache the insights
+            self.insightsCache[treatment.id] = insights
+            
+            // Update published properties
+            self.latestInsights = insights
+            self.isLoading = false
+        }
+    }
+    
+    // Legacy methods for backward compatibility
+    // These will be removed once all code is migrated to the unified model
+    
+    @available(*, deprecated, message: "Use generateMockInsights with Treatment instead")
     private func generateMockInsights(
         for treatmentProtocol: InjectionProtocol,
         profile: UserProfile,
         simulationData: [DataPoint],
         compoundLibrary: CompoundLibrary
     ) {
-        // Simulate network delay
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
-            guard let self = self else { return }
-            
-            // Create mock insights based on protocol type
-            let insights = self.createMockInsightsForProtocol(treatmentProtocol, profile: profile, simulationData: simulationData, compoundLibrary: compoundLibrary)
-            
-            // Cache the insights
-            self.insightsCache[treatmentProtocol.id] = insights
-            
-            // Update published properties
-            self.latestInsights = insights
-            self.isLoading = false
-        }
+        // Convert legacy protocol to unified Treatment
+        let treatment = Treatment(from: treatmentProtocol)
+        
+        // Use the new method
+        generateMockInsights(
+            for: treatment,
+            profile: profile,
+            simulationData: simulationData,
+            compoundLibrary: compoundLibrary
+        )
     }
     
-    /// Mock implementation for generating cycle insights
+    @available(*, deprecated, message: "Use generateMockAdvancedTreatmentInsights with Treatment instead")
     private func generateMockCycleInsights(
         for cycle: Cycle,
         profile: UserProfile,
         simulationData: [DataPoint],
         compoundLibrary: CompoundLibrary
     ) {
-        // Simulate network delay
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
-            guard let self = self else { return }
-            
-            // Create mock insights for the cycle
-            let insights = self.createMockInsightsForCycle(cycle, profile: profile, simulationData: simulationData, compoundLibrary: compoundLibrary)
-            
-            // Cache the insights
-            self.insightsCache[cycle.id] = insights
-            
-            // Update published properties
-            self.latestInsights = insights
-            self.isLoading = false
-        }
+        // Convert legacy cycle to unified Treatment
+        let treatment = Treatment(from: cycle)
+        
+        // Use the new method
+        generateMockAdvancedTreatmentInsights(
+            for: treatment,
+            profile: profile,
+            simulationData: simulationData,
+            compoundLibrary: compoundLibrary
+        )
     }
     
-    /// Creates mock insights for a protocol
-    private func createMockInsightsForProtocol(
-        _ treatmentProtocol: InjectionProtocol,
+    /// Creates mock insights for a simple treatment
+    private func createMockInsightsForSimpleTreatment(
+        _ treatment: Treatment,
         profile: UserProfile,
         simulationData: [DataPoint],
         compoundLibrary: CompoundLibrary
     ) -> Insights {
-        // Extract protocol details
-        let protocolType = treatmentProtocol.protocolType
-        let protocolName = treatmentProtocol.name
+        // Ensure this is a simple treatment
+        guard treatment.treatmentType == .simple,
+              let frequencyDays = treatment.frequencyDays,
+              let contentType = treatment.contentType else {
+            return Insights(title: "Invalid Treatment", summary: "This treatment type is not supported.", keyPoints: [])
+        }
+        
+        // Extract treatment details
+        let treatmentName = treatment.name
         var compoundOrBlendName = "Unknown"
         
         // Determine the compound or blend name
-        if protocolType == .compound, let compoundID = treatmentProtocol.compoundID,
+        if contentType == .compound, let compoundID = treatment.compoundID,
            let compound = compoundLibrary.compounds.first(where: { $0.id == compoundID }) {
             compoundOrBlendName = compound.commonName
             if let ester = compound.ester {
                 compoundOrBlendName += " \(ester)"
             }
-        } else if protocolType == .blend, let blendID = treatmentProtocol.blendID,
+        } else if contentType == .blend, let blendID = treatment.blendID,
                   let blend = compoundLibrary.blends.first(where: { $0.id == blendID }) {
             compoundOrBlendName = blend.name
         }
@@ -238,34 +346,34 @@ class AIInsightsGenerator: ObservableObject {
         let avgLevel = simulationData.map { $0.level }.reduce(0, +) / Double(max(1, simulationData.count))
         let fluctuation = maxLevel > 0 ? (maxLevel - minLevel) / maxLevel * 100 : 0
         
-        // Generate insights based on protocol characteristics
+        // Generate insights based on treatment characteristics
         var insights = Insights(
-            title: "Insights for \(protocolName)",
-            summary: "Analysis of your \(compoundOrBlendName) protocol.",
+            title: "Insights for \(treatmentName)",
+            summary: "Analysis of your \(compoundOrBlendName) treatment.",
             keyPoints: []
         )
         
         // Add blend explanation if it's a blend
-        if protocolType == .blend {
-            insights.blendExplanation = createMockBlendExplanation(treatmentProtocol, compoundLibrary: compoundLibrary)
+        if contentType == .blend {
+            insights.blendExplanation = createMockBlendExplanationForTreatment(treatment, compoundLibrary: compoundLibrary)
         }
         
-        // Add key points based on protocol characteristics
+        // Add key points based on treatment characteristics
         
         // 1. Frequency point
-        if treatmentProtocol.frequencyDays >= 7 {
+        if frequencyDays >= 7 {
             insights.keyPoints.append(
                 KeyPoint(
                     title: "Consider splitting your dose",
-                    description: "Your current injection frequency of every \(treatmentProtocol.frequencyDays) days leads to significant hormone fluctuations. Consider splitting your total dose into smaller, more frequent injections to achieve more stable hormone levels.",
+                    description: "Your current injection frequency of every \(frequencyDays) days leads to significant hormone fluctuations. Consider splitting your total dose into smaller, more frequent injections to achieve more stable hormone levels.",
                     type: .suggestion
                 )
             )
-        } else if treatmentProtocol.frequencyDays <= 2 {
+        } else if frequencyDays <= 2 {
             insights.keyPoints.append(
                 KeyPoint(
                     title: "Good injection frequency",
-                    description: "Your frequent injection schedule of every \(treatmentProtocol.frequencyDays) days helps maintain stable hormone levels with minimal fluctuations.",
+                    description: "Your frequent injection schedule of every \(frequencyDays) days helps maintain stable hormone levels with minimal fluctuations.",
                     type: .positive
                 )
             )
@@ -276,7 +384,7 @@ class AIInsightsGenerator: ObservableObject {
             insights.keyPoints.append(
                 KeyPoint(
                     title: "High level fluctuation",
-                    description: "Your current protocol results in approximately \(fluctuation.isFinite ? Int(fluctuation) : 0)% fluctuation between peak and trough levels, which may lead to inconsistent symptoms and effects.",
+                    description: "Your current treatment results in approximately \(fluctuation.isFinite ? Int(fluctuation) : 0)% fluctuation between peak and trough levels, which may lead to inconsistent symptoms and effects.",
                     type: .warning
                 )
             )
@@ -284,7 +392,7 @@ class AIInsightsGenerator: ObservableObject {
             insights.keyPoints.append(
                 KeyPoint(
                     title: "Stable hormone levels",
-                    description: "Your protocol achieves excellent stability with only \(fluctuation.isFinite ? Int(fluctuation) : 0)% fluctuation between peak and trough levels.",
+                    description: "Your treatment achieves excellent stability with only \(fluctuation.isFinite ? Int(fluctuation) : 0)% fluctuation between peak and trough levels.",
                     type: .positive
                 )
             )
@@ -322,53 +430,75 @@ class AIInsightsGenerator: ObservableObject {
         return insights
     }
     
-    /// Creates mock insights for a cycle
-    private func createMockInsightsForCycle(
-        _ cycle: Cycle,
+    /// Legacy method for backward compatibility
+    @available(*, deprecated, message: "Use createMockInsightsForSimpleTreatment instead")
+    private func createMockInsightsForProtocol(
+        _ treatmentProtocol: InjectionProtocol,
         profile: UserProfile,
         simulationData: [DataPoint],
         compoundLibrary: CompoundLibrary
     ) -> Insights {
-        // Extract cycle details
-        let cycleName = cycle.name
-        let totalWeeks = cycle.totalWeeks
-        let stageCount = cycle.stages.count
+        // Convert legacy protocol to unified Treatment
+        let treatment = Treatment(from: treatmentProtocol)
         
-        // Generate summary of compounds and blends used in the cycle
+        // Use the new method
+        return createMockInsightsForSimpleTreatment(treatment, profile: profile, simulationData: simulationData, compoundLibrary: compoundLibrary)
+    }
+    
+    /// Creates mock insights for an advanced treatment
+    private func createMockInsightsForAdvancedTreatment(
+        _ treatment: Treatment,
+        profile: UserProfile,
+        simulationData: [DataPoint],
+        compoundLibrary: CompoundLibrary
+    ) -> Insights {
+        // Ensure this is an advanced treatment
+        guard treatment.treatmentType == .advanced,
+              let totalWeeks = treatment.totalWeeks,
+              let stages = treatment.stages else {
+            return Insights(title: "Invalid Treatment", summary: "This treatment type is not supported.", keyPoints: [])
+        }
+        
+        // Extract treatment details
+        let treatmentName = treatment.name
+        let stageCount = stages.count
+        
+        // Generate summary of compounds and blends used in the treatment
         var compoundsUsed = Set<String>()
         var blendsUsed = Set<String>()
         
-        for stage in cycle.stages {
-            for compoundItem in stage.compounds {
-                if let compound = compoundLibrary.compounds.first(where: { $0.id == compoundItem.compoundID }) {
-                    compoundsUsed.insert(compound.commonName)
+        for stage in stages {
+            for compound in stage.compounds {
+                if let actualCompound = compoundLibrary.compounds.first(where: { $0.id == compound.compoundID }) {
+                    compoundsUsed.insert(actualCompound.commonName)
                 }
             }
             
-            for blendItem in stage.blends {
-                if let blend = compoundLibrary.blends.first(where: { $0.id == blendItem.blendID }) {
-                    blendsUsed.insert(blend.name)
+            for blend in stage.blends {
+                if let actualBlend = compoundLibrary.blends.first(where: { $0.id == blend.blendID }) {
+                    blendsUsed.insert(actualBlend.name)
                 }
             }
         }
         
         // Get simulation statistics
         let maxLevel = simulationData.map { $0.level }.max() ?? 0
+        // We're not using these in the current implementation, but they're available for future enhancements
         let _ = simulationData.map { $0.level }.min() ?? 0
         let _ = simulationData.map { $0.level }.reduce(0, +) / Double(max(1, simulationData.count))
         
-        // Generate insights for the cycle
+        // Generate insights for the advanced treatment
         var insights = Insights(
-            title: "Cycle Analysis: \(cycleName)",
-            summary: "Analysis of your \(totalWeeks)-week cycle with \(stageCount) stages.",
+            title: "Treatment Analysis: \(treatmentName)",
+            summary: "Analysis of your \(totalWeeks)-week advanced treatment with \(stageCount) stages.",
             keyPoints: []
         )
         
-        // 1. Cycle structure point
+        // 1. Structure point
         insights.keyPoints.append(
             KeyPoint(
-                title: "Cycle Structure",
-                description: "Your cycle spans \(totalWeeks) weeks with \(stageCount) distinct stages, using \(compoundsUsed.count) compounds and \(blendsUsed.count) blends.",
+                title: "Treatment Structure",
+                description: "Your treatment spans \(totalWeeks) weeks with \(stageCount) distinct stages, using \(compoundsUsed.count) compounds and \(blendsUsed.count) blends.",
                 type: .information
             )
         )
@@ -378,7 +508,7 @@ class AIInsightsGenerator: ObservableObject {
             let compoundsList = compoundsUsed.joined(separator: ", ")
             let blendsList = blendsUsed.joined(separator: ", ")
             
-            var description = "This cycle utilizes "
+            var description = "This treatment utilizes "
             if !compoundsUsed.isEmpty {
                 description += "the following compounds: \(compoundsList)"
             }
@@ -404,7 +534,7 @@ class AIInsightsGenerator: ObservableObject {
             insights.keyPoints.append(
                 KeyPoint(
                     title: "Very high peak levels",
-                    description: "This cycle produces a maximum concentration of \(maxLevel.isFinite ? Int(maxLevel) : 0) ng/dL, which is significantly above the typical target range. Consider reducing dosages during peak periods.",
+                    description: "This treatment produces a maximum concentration of \(maxLevel.isFinite ? Int(maxLevel) : 0) ng/dL, which is significantly above the typical target range. Consider reducing dosages during peak periods.",
                     type: .warning
                 )
             )
@@ -412,7 +542,7 @@ class AIInsightsGenerator: ObservableObject {
             insights.keyPoints.append(
                 KeyPoint(
                     title: "Elevated peak levels",
-                    description: "This cycle produces a maximum concentration of \(maxLevel.isFinite ? Int(maxLevel) : 0) ng/dL, which is above the typical target maximum of \(targetMax.isFinite ? Int(targetMax) : 0) ng/dL.",
+                    description: "This treatment produces a maximum concentration of \(maxLevel.isFinite ? Int(maxLevel) : 0) ng/dL, which is above the typical target maximum of \(targetMax.isFinite ? Int(targetMax) : 0) ng/dL.",
                     type: .warning
                 )
             )
@@ -422,8 +552,8 @@ class AIInsightsGenerator: ObservableObject {
         if totalWeeks > 12 {
             insights.keyPoints.append(
                 KeyPoint(
-                    title: "Consider post-cycle recovery",
-                    description: "Your cycle duration of \(totalWeeks) weeks is relatively long. Consider implementing a proper post-cycle recovery protocol to help restore natural hormone production.",
+                    title: "Consider post-treatment recovery",
+                    description: "Your treatment duration of \(totalWeeks) weeks is relatively long. Consider implementing a proper post-treatment recovery protocol to help restore natural hormone production.",
                     type: .suggestion
                 )
             )
@@ -432,10 +562,26 @@ class AIInsightsGenerator: ObservableObject {
         return insights
     }
     
-    /// Creates a mock blend explanation
-    private func createMockBlendExplanation(_ treatmentProtocol: InjectionProtocol, compoundLibrary: CompoundLibrary) -> String? {
-        guard treatmentProtocol.protocolType == .blend,
-              let blendID = treatmentProtocol.blendID,
+    /// Legacy method for backward compatibility
+    @available(*, deprecated, message: "Use createMockInsightsForAdvancedTreatment instead")
+    private func createMockInsightsForCycle(
+        _ cycle: Cycle,
+        profile: UserProfile,
+        simulationData: [DataPoint],
+        compoundLibrary: CompoundLibrary
+    ) -> Insights {
+        // Convert legacy cycle to unified Treatment
+        let treatment = Treatment(from: cycle)
+        
+        // Use the new method
+        return createMockInsightsForAdvancedTreatment(treatment, profile: profile, simulationData: simulationData, compoundLibrary: compoundLibrary)
+    }
+    
+    /// Creates a mock blend explanation for a treatment
+    private func createMockBlendExplanationForTreatment(_ treatment: Treatment, compoundLibrary: CompoundLibrary) -> String? {
+        guard treatment.treatmentType == .simple,
+              treatment.contentType == .blend,
+              let blendID = treatment.blendID,
               let blend = compoundLibrary.blends.first(where: { $0.id == blendID }) else {
             return nil
         }
@@ -496,9 +642,21 @@ class AIInsightsGenerator: ObservableObject {
         return explanation
     }
     
+    /// Legacy method for backward compatibility
+    @available(*, deprecated, message: "Use createMockBlendExplanationForTreatment instead")
+    private func createMockBlendExplanation(_ treatmentProtocol: InjectionProtocol, compoundLibrary: CompoundLibrary) -> String? {
+        // Convert legacy protocol to unified Treatment
+        guard treatmentProtocol.protocolType == .blend else {
+            return nil
+        }
+        
+        // Use the new method
+        return createMockBlendExplanationForTreatment(Treatment(from: treatmentProtocol), compoundLibrary: compoundLibrary)
+    }
+    
     /// Real implementation would make an API call to OpenAI
     private func makeOpenAIAPICall(
-        for treatmentProtocol: InjectionProtocol,
+        for treatment: Treatment,
         profile: UserProfile,
         simulationData: [DataPoint],
         compoundLibrary: CompoundLibrary,
@@ -511,6 +669,22 @@ class AIInsightsGenerator: ObservableObject {
         // 2. Make API call to OpenAI
         // 3. Process the response
         // 4. Return the insights
+    }
+    
+    /// Legacy method for backward compatibility
+    @available(*, deprecated, message: "Use makeOpenAIAPICall with Treatment instead")
+    private func makeOpenAIAPICall(
+        for treatmentProtocol: InjectionProtocol,
+        profile: UserProfile,
+        simulationData: [DataPoint],
+        compoundLibrary: CompoundLibrary,
+        completion: @escaping (Result<Insights, Error>) -> Void
+    ) {
+        // Convert legacy protocol to unified Treatment
+        let treatment = Treatment(from: treatmentProtocol)
+        
+        // Use the new method
+        makeOpenAIAPICall(for: treatment, profile: profile, simulationData: simulationData, compoundLibrary: compoundLibrary, completion: completion)
     }
 }
 

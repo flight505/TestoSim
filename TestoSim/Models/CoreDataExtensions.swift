@@ -92,8 +92,8 @@ extension UserProfile {
     }
 }
 
-// MARK: - InjectionProtocol Extensions
-
+// MARK: - InjectionProtocol Extensions (Legacy)
+@available(*, deprecated, message: "Use Treatment with treatmentType = .simple instead")
 extension InjectionProtocol {
     // Create an InjectionProtocol from a Core Data CDInjectionProtocol
     init?(from cdProtocol: CDInjectionProtocol) {
@@ -451,6 +451,7 @@ extension VialBlend.Component {
 
 // MARK: - Cycle Extensions
 
+@available(*, deprecated, message: "Use Treatment with treatmentType = .advanced instead")
 extension Cycle {
     init(from cdCycle: CDCycle, context: NSManagedObjectContext) {
         self.id = cdCycle.id ?? UUID()
@@ -511,12 +512,12 @@ extension CycleStage {
         
         // Parse compounds and blends from JSON
         if let compoundsData = cdStage.compoundsData, 
-           let compoundsArray = try? JSONDecoder().decode([CompoundStageItem].self, from: compoundsData) {
+           let compoundsArray = try? JSONDecoder().decode([CycleCompoundItem].self, from: compoundsData) {
             self.compounds = compoundsArray
         }
         
         if let blendsData = cdStage.blendsData,
-           let blendsArray = try? JSONDecoder().decode([BlendStageItem].self, from: blendsData) {
+           let blendsArray = try? JSONDecoder().decode([CycleBlendItem].self, from: blendsData) {
             self.blends = blendsArray
         }
     }
@@ -549,5 +550,29 @@ extension CycleStage {
         }
         
         return cdStage
+    }
+}
+
+// MARK: - NSFetchRequest Extensions for the Unified Treatment Model
+
+extension CDTreatment {
+    static func fetchRequest(forID id: UUID) -> NSFetchRequest<CDTreatment> {
+        let request = NSFetchRequest<CDTreatment>(entityName: "CDTreatment")
+        request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+        return request
+    }
+    
+    static func fetchRequest(forType type: String) -> NSFetchRequest<CDTreatment> {
+        let request = NSFetchRequest<CDTreatment>(entityName: "CDTreatment")
+        request.predicate = NSPredicate(format: "treatmentType == %@", type)
+        return request
+    }
+}
+
+extension CDTreatmentStage {
+    static func fetchRequest(forTreatmentID treatmentID: UUID) -> NSFetchRequest<CDTreatmentStage> {
+        let request = NSFetchRequest<CDTreatmentStage>(entityName: "CDTreatmentStage")
+        request.predicate = NSPredicate(format: "treatment.id == %@", treatmentID as CVarArg)
+        return request
     }
 } 

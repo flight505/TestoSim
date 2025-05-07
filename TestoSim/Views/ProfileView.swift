@@ -4,7 +4,7 @@ struct ProfileView: View {
     @EnvironmentObject var dataStore: AppDataStore
     @State private var dobString: String = ""
     @State private var showingNotificationSettings = false
-    @State private var showingInjectionHistory = false
+    @State private var showingTreatmentHistory = false
     @State private var showingModelInfo = false
     @State private var showingAllometricInfo = false
     
@@ -85,7 +85,7 @@ struct ProfileView: View {
                 }
             }
             
-            Section("Notifications & Adherence") {
+            Section("Notifications & Treatment Adherence") {
                 Button {
                     showingNotificationSettings = true
                 } label: {
@@ -101,13 +101,13 @@ struct ProfileView: View {
                 }
                 
                 Button {
-                    showingInjectionHistory = true
+                    showingTreatmentHistory = true
                 } label: {
                     HStack {
                         Image(systemName: "list.clipboard")
                             .frame(width: 25, height: 25)
                             .foregroundColor(.blue)
-                        Text("Injection History")
+                        Text("Treatment Administration History")
                         Spacer()
                         Image(systemName: "chevron.right")
                             .foregroundColor(.gray)
@@ -117,10 +117,39 @@ struct ProfileView: View {
                 // Show adherence rate if we have any data
                 if dataStore.adherenceStats().total > 0 {
                     HStack {
-                        Text("Adherence Rate:")
+                        Text("Treatment Adherence Rate:")
                         Spacer()
                         Text(String(format: "%.1f%%", dataStore.adherencePercentage()))
                             .fontWeight(.bold)
+                    }
+                }
+            }
+            
+            Section("Treatments") {
+                // Display overview of treatments in the system
+                HStack {
+                    Text("Simple Treatments:")
+                    Spacer()
+                    Text("\(dataStore.treatments.filter { $0.treatmentType == .simple }.count)")
+                        .fontWeight(.bold)
+                }
+                
+                HStack {
+                    Text("Advanced Treatments:")
+                    Spacer()
+                    Text("\(dataStore.treatments.filter { $0.treatmentType == .advanced }.count)")
+                        .fontWeight(.bold)
+                }
+                
+                NavigationLink {
+                    ProtocolListView()
+                        .environmentObject(dataStore)
+                } label: {
+                    HStack {
+                        Image(systemName: "list.bullet.clipboard")
+                            .frame(width: 25, height: 25)
+                            .foregroundColor(.blue)
+                        Text("Manage Treatments")
                     }
                 }
             }
@@ -153,8 +182,12 @@ struct ProfileView: View {
                 }
             }
             
-            Section("Calibration") {
-                Text("Model Calibration Factor: \(dataStore.profile.calibrationFactor.formatted(.number.precision(.fractionLength(2))))")
+            Section("Treatment Model Calibration") {
+                Text("Calibration Factor: \(dataStore.profile.calibrationFactor.formatted(.number.precision(.fractionLength(2))))")
+                Text("This factor affects treatment level predictions for simple and advanced treatments.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                
                 Button("Reset Calibration to 1.0") {
                     dataStore.profile.calibrationFactor = 1.0
                     dataStore.recalcSimulation()
@@ -170,7 +203,7 @@ struct ProfileView: View {
             NotificationSettingsView()
                 .environmentObject(dataStore)
         }
-        .sheet(isPresented: $showingInjectionHistory) {
+        .sheet(isPresented: $showingTreatmentHistory) {
             InjectionHistoryView()
                 .environmentObject(dataStore)
         }
@@ -190,7 +223,7 @@ struct AllometricInfoView: View {
                             .fontWeight(.bold)
                             .padding(.bottom, 6)
                         
-                        Text("TestoSim uses allometric scaling to personalize pharmacokinetic predictions based on your physical measurements.")
+                        Text("TestoSim uses allometric scaling to personalize pharmacokinetic predictions for your treatments based on your physical measurements.")
                             .font(.headline)
                             .padding(.bottom, 6)
                         
@@ -246,10 +279,10 @@ struct AllometricInfoView: View {
                             .padding(.top)
                         
                         VStack(alignment: .leading, spacing: 8) {
-                            Label("More accurate peak and trough predictions", systemImage: "checkmark.circle")
-                            Label("Better timing recommendations for blood tests", systemImage: "checkmark.circle")
-                            Label("More precise dosing guidance", systemImage: "checkmark.circle")
-                            Label("Personalized pharmacokinetic calculations", systemImage: "checkmark.circle")
+                            Label("More accurate treatment level predictions", systemImage: "checkmark.circle")
+                            Label("Better timing for treatment administrations", systemImage: "checkmark.circle")
+                            Label("More precise dosing guidance for all treatment types", systemImage: "checkmark.circle")
+                            Label("Personalized pharmacokinetic models for your treatments", systemImage: "checkmark.circle")
                         }
                         .padding(.leading)
                         
@@ -260,7 +293,7 @@ struct AllometricInfoView: View {
                         
                         Text("This approach is based on peer-reviewed research on how testosterone pharmacokinetics vary with body size. The scaling exponents (1.0 for volume, 0.75 for clearance) are derived from population studies.")
                         
-                        Text("TestoSim applies these principles to all compounds in the library to provide you with the most accurate predictions possible.")
+                        Text("TestoSim applies these principles to all treatments and compounds in the library to provide you with the most accurate predictions possible for both simple and advanced treatments.")
                     }
                 }
                 .padding()

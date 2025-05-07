@@ -98,14 +98,12 @@ struct TreatmentListView: View {
         }
         // Sheet to add new treatment (would be implemented separately)
         .sheet(isPresented: $viewModel.isAddingTreatment) {
-            Text("Add Treatment Form")
-                // This would be replaced with actual add treatment form
+            TreatmentFormView(viewModel: viewModel, compoundLibrary: CompoundLibrary())
         }
-        // Sheet to edit existing treatment (would be implemented separately)
+        // Sheet to edit existing treatment
         .sheet(isPresented: $viewModel.isEditingTreatment) {
             if let treatment = viewModel.treatmentToEdit {
-                Text("Edit Treatment: \(treatment.name)")
-                    // This would be replaced with actual edit treatment form
+                TreatmentFormView(viewModel: viewModel, compoundLibrary: CompoundLibrary(), treatment: treatment)
             }
         }
     }

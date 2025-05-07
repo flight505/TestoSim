@@ -1,11 +1,11 @@
 import SwiftUI
 
-struct CycleStageFormView: View {
+struct TreatmentStageFormView: View {
     @EnvironmentObject var dataStore: AppDataStore
     @Binding var isPresented: Bool
     
-    var cycle: Cycle
-    var stageToEdit: CycleStage?
+    var treatment: Treatment
+    var stageToEdit: TreatmentStage?
     
     @State private var stageName: String = ""
     @State private var startWeek: Int = 0
@@ -14,8 +14,8 @@ struct CycleStageFormView: View {
     @State private var isPresentingBlendPicker = false
     
     // Stage items
-    @State private var compounds: [CompoundStageItem] = []
-    @State private var blends: [BlendStageItem] = []
+    @State private var compounds: [Treatment.StageCompound] = []
+    @State private var blends: [Treatment.StageBlend] = []
     
     // Temporary item being configured
     @State private var tempCompound: Compound?
@@ -40,14 +40,14 @@ struct CycleStageFormView: View {
                         Text("Start Week")
                         Spacer()
                         Picker("Start Week", selection: $startWeek) {
-                            ForEach(Array(0..<cycle.totalWeeks), id: \.self) { week in
+                            ForEach(Array(0..<(treatment.totalWeeks ?? 0)), id: \.self) { week in
                                 Text("Week \(week + 1)").tag(week)
                             }
                         }
                         .pickerStyle(MenuPickerStyle())
                     }
                     
-                    Stepper("Duration: \(durationWeeks) weeks", value: $durationWeeks, in: 1...max(1, cycle.totalWeeks - startWeek))
+                    Stepper("Duration: \(durationWeeks) weeks", value: $durationWeeks, in: 1...max(1, (treatment.totalWeeks ?? 0) - startWeek))
                 }
                 
                 Section(header: stageItemsHeader) {
@@ -174,58 +174,69 @@ struct CycleStageFormView: View {
             stageName = stage.name
             startWeek = stage.startWeek
             durationWeeks = stage.durationWeeks
-            compounds = stage.compounds.map { $0.toStageCompound() }
-            blends = stage.blends.map { $0.toStageBlend() }
+            compounds = stage.compounds
+            blends = stage.blends
         } else {
             // Find the first available week after any existing stages
-            if !cycle.stages.isEmpty {
-                let lastStage = cycle.stages.max(by: { $0.startWeek + $0.durationWeeks < $1.startWeek + $1.durationWeeks })
+            if let stages = treatment.stages, !stages.isEmpty {
+                let lastStage = stages.max(by: { $0.startWeek + $0.durationWeeks < $1.startWeek + $1.durationWeeks })
                 if let lastStage = lastStage {
-                    startWeek = min(lastStage.startWeek + lastStage.durationWeeks, cycle.totalWeeks - 1)
+                    startWeek = min(lastStage.startWeek + lastStage.durationWeeks, (treatment.totalWeeks ?? 0) - 1)
                 }
             }
             
             // Default stage name if creating new
-            stageName = "Stage \(cycle.stages.count + 1)"
+            if let stages = treatment.stages {
+                stageName = "Stage \(stages.count + 1)"
+            } else {
+                stageName = "Stage 1"
+            }
         }
     }
     
     private func saveStage() {
         // Create a new stage or update existing
-        var updatedStage: CycleStage
+        var updatedStage: TreatmentStage
+        
         if let existingStage = stageToEdit {
             // Update existing stage
             updatedStage = existingStage
             updatedStage.name = stageName
             updatedStage.startWeek = startWeek
             updatedStage.durationWeeks = durationWeeks
-            updatedStage.compounds = compounds.map { CycleCompoundItem(from: $0) }
-            updatedStage.blends = blends.map { CycleBlendItem(from: $0) }
+            updatedStage.compounds = compounds
+            updatedStage.blends = blends
             
-            // Find and replace in cycle
-            var updatedCycle = cycle
-            if let index = updatedCycle.stages.firstIndex(where: { $0.id == existingStage.id }) {
-                updatedCycle.stages[index] = updatedStage
+            // Find and replace in treatment
+            var updatedTreatment = treatment
+            if var stages = updatedTreatment.stages, let index = stages.firstIndex(where: { $0.id == existingStage.id }) {
+                stages[index] = updatedStage
+                updatedTreatment.stages = stages
             }
             
-            // Save cycle
-            dataStore.saveCycle(updatedCycle)
+            // Save treatment
+            dataStore.saveTreatment(updatedTreatment)
         } else {
             // Create new stage
-            updatedStage = CycleStage(
+            updatedStage = TreatmentStage(
                 name: stageName,
                 startWeek: startWeek,
                 durationWeeks: durationWeeks,
-                compounds: compounds.map { CycleCompoundItem(from: $0) },
-                blends: blends.map { CycleBlendItem(from: $0) }
+                compounds: compounds,
+                blends: blends
             )
             
-            // Add to cycle
-            var updatedCycle = cycle
-            updatedCycle.stages.append(updatedStage)
+            // Add to treatment
+            var updatedTreatment = treatment
+            if var stages = updatedTreatment.stages {
+                stages.append(updatedStage)
+                updatedTreatment.stages = stages
+            } else {
+                updatedTreatment.stages = [updatedStage]
+            }
             
-            // Save cycle
-            dataStore.saveCycle(updatedCycle)
+            // Save treatment
+            dataStore.saveTreatment(updatedTreatment)
         }
     }
     
@@ -273,7 +284,7 @@ struct CycleStageFormView: View {
     private func addCompoundItem() {
         guard let compound = tempCompound else { return }
         
-        let newItem = CompoundStageItem(
+        let newItem = Treatment.StageCompound(
             compoundID: compound.id,
             compoundName: compound.fullDisplayName,
             doseMg: tempDoseMg,
@@ -287,7 +298,7 @@ struct CycleStageFormView: View {
     private func addBlendItem() {
         guard let blend = tempBlend else { return }
         
-        let newItem = BlendStageItem(
+        let newItem = Treatment.StageBlend(
             blendID: blend.id,
             blendName: blend.name,
             doseMg: tempDoseMg,
@@ -300,7 +311,7 @@ struct CycleStageFormView: View {
 }
 
 struct CompoundItemRow: View {
-    let item: CompoundStageItem
+    let item: Treatment.StageCompound
     
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -336,7 +347,7 @@ struct CompoundItemRow: View {
 }
 
 struct BlendItemRow: View {
-    let item: BlendStageItem
+    let item: Treatment.StageBlend
     
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -423,7 +434,7 @@ struct ItemConfigurationView: View {
     }
 }
 
-// Compound Picker View (simplified version)
+// Compound Picker View
 struct CompoundPickerView: View {
     @EnvironmentObject var dataStore: AppDataStore
     @Binding var selectedCompound: Compound?
@@ -454,7 +465,7 @@ struct CompoundPickerView: View {
     }
 }
 
-// Blend Picker View (simplified version)
+// Blend Picker View
 struct BlendPickerView: View {
     @EnvironmentObject var dataStore: AppDataStore
     @Binding var selectedBlend: VialBlend?
@@ -489,4 +500,4 @@ struct BlendPickerView: View {
             .navigationTitle("Select Blend")
         }
     }
-} 
+}

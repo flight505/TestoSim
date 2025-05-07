@@ -20,7 +20,7 @@ struct VisualizationModel {
         let type: LayerType
         let name: String
         let color: String  // Color as hex string
-        let opacity: Double
+        var opacity: Double
         var isVisible: Bool
         var data: [DataPoint]
         
@@ -77,6 +77,34 @@ struct VisualizationModel {
         if let index = layers.firstIndex(where: { $0.id == id }) {
             layers[index].opacity = min(1.0, max(0.0, opacity))
         }
+    }
+    
+    /// Move a layer to a new position
+    mutating func moveLayer(from source: Int, to destination: Int) {
+        guard source >= 0, source < layers.count, 
+              destination >= 0, destination < layers.count, 
+              source != destination else {
+            return
+        }
+        
+        let layer = layers.remove(at: source)
+        layers.insert(layer, at: destination)
+    }
+    
+    /// Move a layer up in the order (rendered on top)
+    mutating func moveLayerUp(id: UUID) {
+        guard let index = layers.firstIndex(where: { $0.id == id }), index > 0 else {
+            return
+        }
+        moveLayer(from: index, to: index - 1)
+    }
+    
+    /// Move a layer down in the order (rendered below)
+    mutating func moveLayerDown(id: UUID) {
+        guard let index = layers.firstIndex(where: { $0.id == id }), index < layers.count - 1 else {
+            return
+        }
+        moveLayer(from: index, to: index + 1)
     }
     
     /// Get all layers of a specific type
@@ -161,7 +189,7 @@ class VisualizationFactory {
     /// Add visualization layers for a simple treatment
     private func addLayersForSimpleTreatment(_ treatment: Treatment, to model: inout VisualizationModel, weight: Double, calibrationFactor: Double) {
         guard let doseMg = treatment.doseMg,
-              let frequencyDays = treatment.frequencyDays else {
+              let _ = treatment.frequencyDays else {
             return
         }
         
@@ -330,7 +358,7 @@ class VisualizationFactory {
         // Process each simple treatment
         for simpleTreatment in simpleTreatments {
             if let doseMg = simpleTreatment.doseMg,
-               let frequencyDays = simpleTreatment.frequencyDays {
+               let _ = simpleTreatment.frequencyDays {
                 
                 // Determine route
                 let route: Compound.Route

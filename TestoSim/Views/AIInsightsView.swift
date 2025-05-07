@@ -6,8 +6,8 @@ struct AIInsightsView: View {
     @StateObject private var insightsGenerator = AIInsightsGenerator()
     @ObservedObject private var openAIService = OpenAIService.shared
     
-    var protocolID: UUID?
-    var cycleID: UUID?
+    // Treatment ID to analyze
+    var treatmentID: UUID?
     
     @State private var isLoading = false
     @State private var expandedPoints: Set<String> = []
@@ -163,18 +163,18 @@ struct AIInsightsView: View {
                 .font(.system(size: 40))
                 .foregroundColor(.orange)
             
-            if dataStore.selectedProtocolID == nil && dataStore.selectedCycleID == nil {
-                Text("No protocol or cycle selected")
+            if dataStore.selectedProtocolID == nil && dataStore.selectedCycleID == nil && treatmentID == nil {
+                Text("No treatment selected")
                     .font(.headline)
                 
-                Text("Select a protocol or cycle from the Protocols or Cycles tab to generate insights.")
+                Text("Select a treatment to generate insights.")
                     .multilineTextAlignment(.center)
                     .foregroundColor(.secondary)
             } else {
                 Text("No insights available")
                     .font(.headline)
                 
-                Text("Tap the refresh button to generate insights based on your current protocol or cycle data.")
+                Text("Tap the refresh button to generate insights based on your current treatment data.")
                     .multilineTextAlignment(.center)
                     .foregroundColor(.secondary)
             }
@@ -302,46 +302,55 @@ struct AIInsightsView: View {
     private func generateInsights(forceRefresh: Bool = false) {
         self.isLoading = true
         
-        if let protocolID = protocolID, let treatmentProtocol = dataStore.profile.protocols.first(where: { $0.id == protocolID }) {
-            // Generate insights for a specific protocol
+        // Check if we have a specific treatment to analyze
+        if let treatmentID = treatmentID, let treatment = dataStore.treatments.first(where: { $0.id == treatmentID }) {
+            // Generate insights for the specific treatment
+            switch treatment.treatmentType {
+            case .simple:
+                insightsGenerator.generateInsights(
+                    for: treatment,
+                    profile: dataStore.profile,
+                    simulationData: dataStore.simulationData,
+                    compoundLibrary: dataStore.compoundLibrary,
+                    forceRefresh: forceRefresh
+                )
+            case .advanced:
+                insightsGenerator.generateAdvancedTreatmentInsights(
+                    for: treatment,
+                    profile: dataStore.profile,
+                    simulationData: dataStore.cycleSimulationData,
+                    compoundLibrary: dataStore.compoundLibrary,
+                    forceRefresh: forceRefresh
+                )
+            }
+        }
+        // Fallback to legacy types during transition period
+        else if let protocolID = dataStore.selectedProtocolID,
+                let selectedProtocol = dataStore.profile.protocols.first(where: { $0.id == protocolID }) {
+            // During transition period - convert legacy protocol to Treatment first
+            let treatment = Treatment(from: selectedProtocol)
+            
             insightsGenerator.generateInsights(
-                for: treatmentProtocol,
+                for: treatment,
                 profile: dataStore.profile,
                 simulationData: dataStore.simulationData,
                 compoundLibrary: dataStore.compoundLibrary,
                 forceRefresh: forceRefresh
             )
-        } else if let cycleID = cycleID, let cycle = dataStore.cycles.first(where: { $0.id == cycleID }) {
-            // Generate insights for a specific cycle
-            insightsGenerator.generateCycleInsights(
-                for: cycle,
-                profile: dataStore.profile,
-                simulationData: dataStore.cycleSimulationData,
-                compoundLibrary: dataStore.compoundLibrary,
-                forceRefresh: forceRefresh
-            )
-        } else if let selectedProtocolID = dataStore.selectedProtocolID,
-                  let selectedProtocol = dataStore.profile.protocols.first(where: { $0.id == selectedProtocolID }) {
-            // Use the selected protocol as fallback
-            insightsGenerator.generateInsights(
-                for: selectedProtocol,
-                profile: dataStore.profile,
-                simulationData: dataStore.simulationData,
-                compoundLibrary: dataStore.compoundLibrary,
-                forceRefresh: forceRefresh
-            )
-        } else if let selectedCycleID = dataStore.selectedCycleID,
-                  let selectedCycle = dataStore.cycles.first(where: { $0.id == selectedCycleID }) {
-            // Use the selected cycle as fallback
-            insightsGenerator.generateCycleInsights(
-                for: selectedCycle,
+        } else if let cycleID = dataStore.selectedCycleID,
+                  let selectedCycle = dataStore.cycles.first(where: { $0.id == cycleID }) {
+            // During transition period - convert legacy cycle to Treatment first
+            let treatment = Treatment(from: selectedCycle)
+            
+            insightsGenerator.generateAdvancedTreatmentInsights(
+                for: treatment,
                 profile: dataStore.profile,
                 simulationData: dataStore.cycleSimulationData,
                 compoundLibrary: dataStore.compoundLibrary,
                 forceRefresh: forceRefresh
             )
         } else {
-            // If no protocol or cycle is found, show no insights available
+            // If no treatment is found, show no insights available
             self.isLoading = false
             return
         }

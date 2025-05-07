@@ -3,35 +3,45 @@ import SwiftUI
 struct InjectionHistoryView: View {
     @EnvironmentObject var dataStore: AppDataStore
     @State private var filterBy: UUID? = nil
+    @State private var selectedTreatmentType: String = "simple"
     
     var body: some View {
         NavigationView {
             VStack {
-                InjectionAdherenceStatsView()
+                TreatmentAdherenceStatsView(treatmentType: selectedTreatmentType)
                     .padding()
                     .background(Color(.systemBackground))
                     .cornerRadius(10)
                     .shadow(radius: 1)
                     .padding(.horizontal)
                 
-                protocolFilterPicker
+                // Treatment type selector
+                Picker("Treatment Type", selection: $selectedTreatmentType) {
+                    Text("Simple Treatments").tag("simple")
+                    Text("Advanced Treatments").tag("advanced")
+                }
+                .pickerStyle(SegmentedPickerStyle())
+                .padding(.horizontal)
+                .padding(.top, 8)
+                
+                treatmentFilterPicker
                 
                 List {
                     if historyRecords.isEmpty {
-                        Text("No injection records found")
+                        Text("No treatment administration records found")
                             .foregroundColor(.secondary)
                             .italic()
                             .frame(maxWidth: .infinity, alignment: .center)
                             .listRowBackground(Color.clear)
                     } else {
                         ForEach(historyRecords) { record in
-                            InjectionRecordRow(record: record)
+                            TreatmentAdministrationRow(record: record)
                         }
                     }
                 }
                 .listStyle(InsetGroupedListStyle())
             }
-            .navigationTitle("Injection History")
+            .navigationTitle("Treatment Administration History")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -43,12 +53,15 @@ struct InjectionHistoryView: View {
         }
     }
     
-    private var protocolFilterPicker: some View {
-        Picker("Filter by Protocol", selection: $filterBy) {
-            Text("All Protocols").tag(nil as UUID?)
+    private var treatmentFilterPicker: some View {
+        Picker("Filter by Treatment", selection: $filterBy) {
+            Text("All Treatments").tag(nil as UUID?)
             
-            ForEach(dataStore.profile.protocols) { treatmentProtocol in
-                Text(treatmentProtocol.name).tag(treatmentProtocol.id as UUID?)
+            // Use treatments from dataStore and filter by selected treatment type
+            ForEach(dataStore.treatments.filter { 
+                $0.treatmentType == (selectedTreatmentType == "simple" ? .simple : .advanced)
+            }) { treatment in
+                Text(treatment.name).tag(treatment.id as UUID?)
             }
         }
         .pickerStyle(MenuPickerStyle())
@@ -56,12 +69,13 @@ struct InjectionHistoryView: View {
     }
     
     private var historyRecords: [NotificationManager.InjectionRecord] {
-        dataStore.injectionHistory(for: filterBy)
+        // Use the new method that supports the unified treatment model
+        dataStore.injectionHistory(for: filterBy, treatmentType: selectedTreatmentType)
             .sorted(by: { $0.scheduledDate > $1.scheduledDate })
     }
 }
 
-struct InjectionRecordRow: View {
+struct TreatmentAdministrationRow: View {
     let record: NotificationManager.InjectionRecord
     
     var body: some View {
@@ -144,11 +158,13 @@ struct InjectionRecordRow: View {
     }
 }
 
-struct InjectionAdherenceStatsView: View {
+struct TreatmentAdherenceStatsView: View {
     @EnvironmentObject var dataStore: AppDataStore
+    let treatmentType: String
     
     private var allRecords: [NotificationManager.InjectionRecord] {
-        dataStore.injectionHistory()
+        // Use the new method that supports the unified treatment model
+        dataStore.injectionHistory(treatmentType: treatmentType)
     }
     
     private var onTimeCount: Int {
@@ -177,15 +193,15 @@ struct InjectionAdherenceStatsView: View {
                 .padding(.bottom, 4)
             
             HStack(spacing: 20) {
-                StatItem(label: "On Time", value: onTimeCount, color: .green)
-                StatItem(label: "Late", value: lateCount, color: .orange)
-                StatItem(label: "Missed", value: missedCount, color: .red)
+                TreatmentAdherenceStatItem(label: "On Time", value: onTimeCount, color: .green)
+                TreatmentAdherenceStatItem(label: "Late", value: lateCount, color: .orange)
+                TreatmentAdherenceStatItem(label: "Missed", value: missedCount, color: .red)
             }
         }
     }
 }
 
-struct StatItem: View {
+struct TreatmentAdherenceStatItem: View {
     let label: String
     let value: Int
     let color: Color
@@ -208,5 +224,14 @@ struct InjectionHistoryView_Previews: PreviewProvider {
     static var previews: some View {
         InjectionHistoryView()
             .environmentObject(AppDataStore())
+    }
+}
+
+struct TreatmentAdherenceStatsView_Previews: PreviewProvider {
+    static var previews: some View {
+        TreatmentAdherenceStatsView(treatmentType: "simple")
+            .environmentObject(AppDataStore())
+            .padding()
+            .previewLayout(.sizeThatFits)
     }
 } 

@@ -1,6 +1,7 @@
 import Foundation
 
 /// Represents a complete treatment cycle with multiple stages
+@available(*, deprecated, message: "Use Treatment with treatmentType = .advanced instead")
 struct Cycle: Identifiable, Codable {
     var id: UUID = UUID()
     var name: String
@@ -24,13 +25,14 @@ struct Cycle: Identifiable, Codable {
 }
 
 /// Represents a single stage in a cycle with specific compounds/blends and timing
+@available(*, deprecated, message: "Use Treatment.Stage instead")
 struct CycleStage: Identifiable, Codable {
     var id: UUID = UUID()
     var name: String
     var startWeek: Int  // Week number in the cycle (0-based)
     var durationWeeks: Int
-    var compounds: [CompoundStageItem] = []
-    var blends: [BlendStageItem] = []
+    var compounds: [CycleCompoundItem] = []
+    var blends: [CycleBlendItem] = []
     
     /// Start date calculated from cycle start date and stage's start week
     func startDate(from cycleStartDate: Date) -> Date {
@@ -82,21 +84,67 @@ struct CycleStage: Identifiable, Codable {
 }
 
 /// Represents a single compound item within a cycle stage
-struct CompoundStageItem: Identifiable, Codable {
+@available(*, deprecated, message: "Use Treatment.StageCompound instead")
+struct CycleCompoundItem: Identifiable, Codable {
     var id: UUID = UUID()
     var compoundID: UUID
     var compoundName: String
     var doseMg: Double
     var frequencyDays: Double
     var administrationRoute: String // Compound.Route.rawValue
+    
+    // Conversion from unified model
+    init(from stageCompound: Treatment.StageCompound) {
+        self.id = stageCompound.id
+        self.compoundID = stageCompound.compoundID
+        self.compoundName = stageCompound.compoundName
+        self.doseMg = stageCompound.doseMg
+        self.frequencyDays = stageCompound.frequencyDays
+        self.administrationRoute = stageCompound.administrationRoute
+    }
+    
+    // Conversion to unified model
+    func toStageCompound() -> Treatment.StageCompound {
+        return Treatment.StageCompound(
+            id: self.id,
+            compoundID: self.compoundID,
+            compoundName: self.compoundName,
+            doseMg: self.doseMg,
+            frequencyDays: self.frequencyDays,
+            administrationRoute: self.administrationRoute
+        )
+    }
 }
 
 /// Represents a single blend item within a cycle stage
-struct BlendStageItem: Identifiable, Codable {
+@available(*, deprecated, message: "Use Treatment.StageBlend instead")
+struct CycleBlendItem: Identifiable, Codable {
     var id: UUID = UUID()
     var blendID: UUID
     var blendName: String
     var doseMg: Double
     var frequencyDays: Double
     var administrationRoute: String // Compound.Route.rawValue
+    
+    // Conversion from unified model
+    init(from stageBlend: Treatment.StageBlend) {
+        self.id = stageBlend.id
+        self.blendID = stageBlend.blendID
+        self.blendName = stageBlend.blendName
+        self.doseMg = stageBlend.doseMg
+        self.frequencyDays = stageBlend.frequencyDays
+        self.administrationRoute = stageBlend.administrationRoute
+    }
+    
+    // Conversion to unified model
+    func toStageBlend() -> Treatment.StageBlend {
+        return Treatment.StageBlend(
+            id: self.id,
+            blendID: self.blendID,
+            blendName: self.blendName,
+            doseMg: self.doseMg,
+            frequencyDays: self.frequencyDays,
+            administrationRoute: self.administrationRoute
+        )
+    }
 } 

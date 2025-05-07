@@ -1,4 +1,5 @@
 import Foundation
+import CoreData
 
 /// Represents a unified treatment model that combines protocol and cycle concepts
 /// with support for both simple and advanced treatments
@@ -15,7 +16,47 @@ struct Treatment: Identifiable, Codable {
         case advanced  // Multi-stage treatment with varying compounds/doses (former "Cycle")
     }
     
-    let treatmentType: TreatmentType
+    var treatmentType: TreatmentType
+    
+    // MARK: - Initialization
+    
+    init(id: UUID = UUID(), name: String, startDate: Date, notes: String? = nil, treatmentType: TreatmentType) {
+        self.id = id
+        self.name = name
+        self.startDate = startDate
+        self.notes = notes
+        self.treatmentType = treatmentType
+    }
+    
+    // MARK: - Stage Item Types
+    
+    /// Represents a compound item in a treatment stage
+    struct StageCompound: Identifiable, Codable, Equatable {
+        var id: UUID = UUID()
+        var compoundID: UUID
+        var compoundName: String
+        var doseMg: Double
+        var frequencyDays: Double
+        var administrationRoute: String
+        
+        static func == (lhs: Treatment.StageCompound, rhs: Treatment.StageCompound) -> Bool {
+            return lhs.id == rhs.id
+        }
+    }
+    
+    /// Represents a blend item in a treatment stage
+    struct StageBlend: Identifiable, Codable, Equatable {
+        var id: UUID = UUID()
+        var blendID: UUID
+        var blendName: String
+        var doseMg: Double
+        var frequencyDays: Double
+        var administrationRoute: String
+        
+        static func == (lhs: Treatment.StageBlend, rhs: Treatment.StageBlend) -> Bool {
+            return lhs.id == rhs.id
+        }
+    }
     
     // MARK: - Simple Treatment Properties
     // Only relevant when treatmentType is .simple
@@ -207,26 +248,64 @@ struct Treatment: Identifiable, Codable {
     }
 }
 
-/// Represents a stage within an advanced treatment
-struct TreatmentStage: Identifiable, Codable {
-    var id: UUID = UUID()
-    var name: String
-    var startWeek: Int  // Week number in the treatment (0-based)
-    var durationWeeks: Int
-    var compounds: [CompoundStageItem] = []
-    var blends: [BlendStageItem] = []
-    
-    /// Start date calculated from treatment start date and stage's start week
-    func startDate(from treatmentStartDate: Date) -> Date {
-        Calendar.current.date(byAdding: .day, value: startWeek * 7, to: treatmentStartDate) ?? treatmentStartDate
+// MARK: - Treatment Stage
+
+/// Represents a stage within the Treatment model
+extension Treatment {
+    struct Stage: Identifiable, Codable {
+        var id: UUID = UUID()
+        var name: String
+        var startWeek: Int  // Week number in the treatment (0-based)
+        var durationWeeks: Int
+        var compounds: [StageCompound] = []
+        var blends: [StageBlend] = []
+        
+        /// Start date calculated from treatment start date and stage's start week
+        func startDate(from treatmentStartDate: Date) -> Date {
+            Calendar.current.date(byAdding: .day, value: startWeek * 7, to: treatmentStartDate) ?? treatmentStartDate
+        }
+        
+        /// End date calculated from start date and duration
+        func endDate(from treatmentStartDate: Date) -> Date {
+            let start = startDate(from: treatmentStartDate)
+            return Calendar.current.date(byAdding: .day, value: durationWeeks * 7, to: start) ?? start
+        }
+        
+        /// Convert to legacy CycleStage
+        func toLegacyCycleStage() -> CycleStage {
+            var stage = CycleStage(
+                id: id,
+                name: name,
+                startWeek: startWeek,
+                durationWeeks: durationWeeks
+            )
+            
+            // Convert compound and blend items
+            stage.compounds = compounds.map { compound in
+                return CycleCompoundItem(from: compound)
+            }
+            
+            stage.blends = blends.map { blend in
+                return CycleBlendItem(from: blend)
+            }
+            
+            return stage
+        }
     }
-    
-    /// End date calculated from start date and duration
-    func endDate(from treatmentStartDate: Date) -> Date {
-        let start = startDate(from: treatmentStartDate)
-        return Calendar.current.date(byAdding: .day, value: durationWeeks * 7, to: start) ?? start
-    }
-    
+}
+
+// MARK: - Stage Items
+
+/// Represents a compound within a stage
+typealias CompoundStageItem = Treatment.StageCompound
+/// Represents a blend within a stage
+typealias BlendStageItem = Treatment.StageBlend
+
+/// Compatibility wrapper for TreatmentStage
+typealias TreatmentStage = Treatment.Stage
+
+// Add generateTreatments to the Stage extension
+extension Treatment.Stage {
     /// Generates simple treatments for this stage
     func generateTreatments(treatmentStartDate: Date) -> [Treatment] {
         var treatments: [Treatment] = []
@@ -272,29 +351,144 @@ struct TreatmentStage: Identifiable, Codable {
         return treatments
     }
     
-    /// Create a TreatmentStage from a legacy CycleStage
+    /// Create a Stage from a legacy CycleStage
     init(from legacyStage: CycleStage) {
         self.id = legacyStage.id
         self.name = legacyStage.name
         self.startWeek = legacyStage.startWeek
         self.durationWeeks = legacyStage.durationWeeks
-        self.compounds = legacyStage.compounds
-        self.blends = legacyStage.blends
+        
+        // Convert compound items
+        self.compounds = legacyStage.compounds.map { compound in
+            return Treatment.StageCompound(
+                id: compound.id,
+                compoundID: compound.compoundID,
+                compoundName: compound.compoundName,
+                doseMg: compound.doseMg,
+                frequencyDays: compound.frequencyDays,
+                administrationRoute: compound.administrationRoute
+            )
+        }
+        
+        // Convert blend items
+        self.blends = legacyStage.blends.map { blend in
+            return Treatment.StageBlend(
+                id: blend.id,
+                blendID: blend.blendID,
+                blendName: blend.blendName,
+                doseMg: blend.doseMg,
+                frequencyDays: blend.frequencyDays,
+                administrationRoute: blend.administrationRoute
+            )
+        }
+    }
+}
+
+// MARK: - Core Data Integration
+
+extension Treatment {
+    /// Create a Treatment from a Core Data CDTreatment entity
+    init?(from cdTreatment: CDTreatment) {
+        guard let id = cdTreatment.id,
+              let name = cdTreatment.name,
+              let startDate = cdTreatment.startDate,
+              let typeString = cdTreatment.treatmentType,
+              let treatmentType = TreatmentType(rawValue: typeString) else {
+            return nil
+        }
+        
+        self.id = id
+        self.name = name
+        self.startDate = startDate
+        self.notes = cdTreatment.notes
+        self.treatmentType = treatmentType
+        
+        // Handle simple treatment properties
+        if treatmentType == .simple {
+            self.doseMg = cdTreatment.doseMg
+            self.frequencyDays = cdTreatment.frequencyDays
+            self.compoundID = cdTreatment.compoundID
+            self.blendID = cdTreatment.blendID
+            self.selectedRoute = cdTreatment.selectedRoute
+            
+            // Convert blood samples
+            if let cdBloodSamples = cdTreatment.bloodSamples as? Set<CDBloodSample> {
+                var bloodSamples: [BloodSample] = []
+                for cdSample in cdBloodSamples {
+                    if let id = cdSample.id,
+                       let date = cdSample.date {
+                        let sample = BloodSample(
+                            id: id,
+                            date: date,
+                            value: cdSample.value,
+                            unit: cdSample.unit ?? "ng/dL"
+                        )
+                        bloodSamples.append(sample)
+                    }
+                }
+                self.bloodSamples = bloodSamples
+            }
+        }
+        
+        // Handle advanced treatment properties
+        if treatmentType == .advanced {
+            self.totalWeeks = Int(cdTreatment.totalWeeks)
+            
+            // Convert stages
+            if let cdStages = cdTreatment.stages as? Set<CDTreatmentStage> {
+                var stages: [Stage] = []
+                for cdStage in cdStages {
+                    if let id = cdStage.id,
+                       let name = cdStage.name {
+                        var stage = Stage(
+                            id: id,
+                            name: name,
+                            startWeek: Int(cdStage.startWeek),
+                            durationWeeks: Int(cdStage.durationWeeks)
+                        )
+                        
+                        // Deserialize compounds data
+                        if let compoundsData = cdStage.compoundsData {
+                            let decoder = JSONDecoder()
+                            if let compounds = try? decoder.decode([StageCompound].self, from: compoundsData) {
+                                stage.compounds = compounds
+                            }
+                        }
+                        
+                        // Deserialize blends data
+                        if let blendsData = cdStage.blendsData {
+                            let decoder = JSONDecoder()
+                            if let blends = try? decoder.decode([StageBlend].self, from: blendsData) {
+                                stage.blends = blends
+                            }
+                        }
+                        
+                        stages.append(stage)
+                    }
+                }
+                self.stages = stages
+            }
+        }
     }
     
-    /// Convert to legacy CycleStage
-    func toLegacyCycleStage() -> CycleStage {
-        var stage = CycleStage(
-            id: id,
-            name: name,
-            startWeek: startWeek,
-            durationWeeks: durationWeeks
-        )
+    /// Save this Treatment to Core Data
+    @discardableResult
+    func saveToCD(context: NSManagedObjectContext) -> CDTreatment {
+        // Check if this Treatment already exists in Core Data
+        let fetchRequest: NSFetchRequest<CDTreatment> = CDTreatment.fetchRequest()
+        fetchRequest.predicate = NSPredicate(format: "id == %@", id as CVarArg)
         
-        stage.compounds = compounds
-        stage.blends = blends
+        do {
+            if (try context.fetch(fetchRequest).first) != nil {
+                // Treatment exists, update it
+                return CDTreatment.from(treatment: self, in: context)
+            }
+        } catch {
+            print("Error checking for existing treatment: \(error)")
+        }
         
-        return stage
+        // If not found, create a new one
+        return CDTreatment.from(treatment: self, in: context)
     }
 }
 

@@ -35,6 +35,31 @@ class CoreDataManager {
             print("Using standard persistent container (CloudKit disabled)")
         }
         
+        // Configure for progressive migration
+        if let storeDescription = container.persistentStoreDescriptions.first {
+            storeDescription.shouldMigrateStoreAutomatically = true
+            storeDescription.shouldInferMappingModelAutomatically = true
+            
+            // Add migration progress notification
+            NotificationCenter.default.addObserver(
+                forName: NSNotification.Name.NSPersistentStoreCoordinatorStoresWillChange,
+                object: container.persistentStoreCoordinator,
+                queue: .main
+            ) { notification in
+                print("Migration about to start")
+                // Post notification to UI if needed
+            }
+            
+            NotificationCenter.default.addObserver(
+                forName: NSNotification.Name.NSPersistentStoreCoordinatorStoresDidChange,
+                object: container.persistentStoreCoordinator,
+                queue: .main
+            ) { notification in
+                print("Migration completed")
+                // Post notification to UI if needed
+            }
+        }
+        
         // Initialize the Core Data stack
         container.loadPersistentStores(completionHandler: { (storeDescription, error) in
             if let error = error as NSError? {
@@ -45,6 +70,14 @@ class CoreDataManager {
                 if let cloudError = error.userInfo[NSUnderlyingErrorKey] as? NSError,
                    cloudError.domain == CKErrorDomain {
                     print("CloudKit error: \(cloudError.localizedDescription)")
+                }
+                
+                // Log migration errors specifically
+                if error.domain == NSCocoaErrorDomain && 
+                   (error.code == NSPersistentStoreIncompatibleVersionHashError ||
+                    error.code == NSMigrationError ||
+                    error.code == NSMigrationMissingSourceModelError) {
+                    print("Migration failed: \(error.localizedDescription)")
                 }
             } else {
                 print("Successfully loaded persistent store: \(storeDescription)")

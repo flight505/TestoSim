@@ -1,5 +1,6 @@
 import Foundation
 
+@available(*, deprecated, message: "Use Treatment with treatmentType = .simple instead")
 struct InjectionProtocol: Identifiable, Codable {
     var id: UUID = UUID()
     var name: String
@@ -71,6 +72,7 @@ struct InjectionProtocol: Identifiable, Codable {
 
 // MARK: - Protocol type enum
 
+@available(*, deprecated, message: "Use Treatment.ContentType instead")
 enum ProtocolType: String, Codable {
     case compound    // Using single Compound
     case blend       // Using VialBlend

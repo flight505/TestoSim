@@ -19,6 +19,16 @@ class AppDataStore: ObservableObject {
     @Published var cycleToEdit: Cycle?          // Used for editing existing cycles
     @Published var isCycleSimulationActive = false
     @Published var cycleSimulationData: [DataPoint] = []
+    
+    // Unified treatment model 
+    @Published var treatments: [Treatment] = []
+    @Published var selectedTreatmentID: UUID?
+    @Published var isPresentingTreatmentForm = false
+    @Published var treatmentToEdit: Treatment?
+    @Published var treatmentSimulationData: [DataPoint] = []
+    
+    // Treatment form adapter for integrating TreatmentFormView
+    private(set) lazy var treatmentFormAdapter = TreatmentFormAdapter(dataStore: self)
 
     // MARK: - Private Properties
     private static let coreDataManager = CoreDataManager.shared
@@ -87,7 +97,53 @@ class AppDataStore: ObservableObject {
         } else {
              selectedProtocolID = nil // Explicitly nil if no protocols
         }
+        
+        // Load unified treatments from Core Data
+        loadTreatmentsFromCoreData()
+        
+        // If there are protocols but no treatments, create treatments from protocols
+        if !profile.protocols.isEmpty && treatments.isEmpty {
+            createTreatmentsFromProtocols()
+            // Reload treatments after creating them
+            loadTreatmentsFromCoreData()
+        }
+        
+        // Also load cycles and create treatments from them if needed
+        loadCyclesFromCoreData()
+        
+        // Create treatments from cycles if they don't exist yet
+        if !cycles.isEmpty {
+            let cycleIDs = cycles.map { $0.id }
+            let missingCycles = cycleIDs.filter { cycleID in
+                !treatments.contains { $0.id == cycleID }
+            }
+            
+            if !missingCycles.isEmpty {
+                for cycle in cycles where missingCycles.contains(cycle.id) {
+                    let treatment = Treatment(from: cycle)
+                    saveTreatment(treatment)
+                }
+                // Reload treatments after creating them
+                loadTreatmentsFromCoreData()
+                print("Created \(missingCycles.count) missing treatments from legacy cycles")
+            }
+        }
 
+        // Set initial selected treatment if any exist
+        if !treatments.isEmpty && selectedTreatmentID == nil {
+            // Prefer to select the same treatment as the protocol, if possible
+            if let selectedID = selectedProtocolID,
+               treatments.contains(where: { $0.id == selectedID }) {
+                selectedTreatmentID = selectedID
+                simulateTreatment(id: selectedID)
+            } else {
+                // Otherwise select the first treatment
+                selectedTreatmentID = treatments.first?.id
+                if let firstID = selectedTreatmentID {
+                    simulateTreatment(id: firstID)
+                }
+            }
+        }
 
         // Generate initial simulation data for the selected protocol (if any)
         recalcSimulation() // This will handle the case where selectedProtocolID is nil
@@ -247,8 +303,11 @@ class AppDataStore: ObservableObject {
                 BloodSample(date: Calendar.current.date(byAdding: .day, value: -15, to: Date())!, value: 720.0, unit: "ng/dL")
             ]
             profile.protocols.append(weeklyProtocol)
+            
+            // Also create a corresponding Treatment for the unified model
+            let treatment = Treatment(from: weeklyProtocol)
+            // Save this treatment to Core Data after the user profile is created
         } else { print("Warning: Could not find Testosterone Cypionate in library for default profile.") }
-
 
         // 2. Split dose protocol (enanthate)
         var splitDoseProtocol = InjectionProtocol(
@@ -262,8 +321,11 @@ class AppDataStore: ObservableObject {
             splitDoseProtocol.compoundID = enanthate.id
             splitDoseProtocol.selectedRoute = Compound.Route.intramuscular.rawValue
             profile.protocols.append(splitDoseProtocol)
+            
+            // Also create a corresponding Treatment for the unified model
+            let treatment = Treatment(from: splitDoseProtocol)
+            // Save this treatment to Core Data after the user profile is created
         } else { print("Warning: Could not find Testosterone Enanthate in library for default profile.") }
-
 
         // 3. Propionate protocol (more frequent injections)
         var propionateProtocol = InjectionProtocol(
@@ -277,43 +339,220 @@ class AppDataStore: ObservableObject {
             propionateProtocol.compoundID = propionate.id
             propionateProtocol.selectedRoute = Compound.Route.subcutaneous.rawValue // Example different route
             profile.protocols.append(propionateProtocol)
+            
+            // Also create a corresponding Treatment for the unified model
+            let treatment = Treatment(from: propionateProtocol)
+            // Save this treatment to Core Data after the user profile is created
         } else { print("Warning: Could not find Testosterone Propionate in library for default profile.") }
-
+        
+        // Instead of creating a legacy Cycle, create an advanced Treatment directly
+        var advancedTreatment = Treatment(
+            name: "Test Cycle",
+            startDate: Calendar.current.date(byAdding: .day, value: -20, to: Date())!,
+            notes: "Example test cycle with multiple compounds",
+            treatmentType: .advanced
+        )
+        
+        // Set advanced treatment properties
+        advancedTreatment.totalWeeks = 12
+        
+        // Create a bulking stage
+        var bulkingStage = Treatment.Stage(
+            name: "Bulking Phase",
+            startWeek: 0,
+            durationWeeks: 8
+        )
+        
+        // Add compounds to the bulking stage
+        if let testEnanthate = compoundLibrary.compounds.first(where: { $0.classType == .testosterone && $0.ester?.lowercased() == "enanthate" }) {
+            let stageCompound = Treatment.StageCompound(
+                id: UUID(),
+                compoundID: testEnanthate.id,
+                compoundName: testEnanthate.fullDisplayName,
+                doseMg: 500.0,
+                frequencyDays: 3.5,
+                administrationRoute: Compound.Route.intramuscular.rawValue
+            )
+            bulkingStage.compounds.append(stageCompound)
+        }
+        
+        // Add the bulking stage to the treatment
+        advancedTreatment.stages = [bulkingStage]
+        
         return profile
+    }
+    
+    // Create unified model treatments from legacy protocols
+    private func createTreatmentsFromProtocols() {
+        for protocol_ in profile.protocols {
+            let treatment = Treatment(from: protocol_)
+            saveTreatment(treatment)
+        }
+        print("Created unified treatments from \(profile.protocols.count) legacy protocols")
+    }
+    
+    // Create unified model treatments from legacy cycles
+    private func createTreatmentsFromCycles() {
+        for cycle in cycles {
+            let treatment = Treatment(from: cycle)
+            saveTreatment(treatment)
+        }
+        print("Created unified treatments from \(cycles.count) legacy cycles")
     }
 
     // MARK: - Protocol Management
-    func addProtocol(_ newProtocol: InjectionProtocol) {
-        profile.protocols.append(newProtocol)
-        selectedProtocolID = newProtocol.id // Select the newly added protocol
-        recalcSimulation() // Simulate the newly added protocol
-        saveProfile() // Prepare profile for saving
-        coreDataManager.saveContext() // Save immediately
-        // Schedule notifications for the new protocol
-        if notificationManager.notificationsEnabled {
-            notificationManager.scheduleNotifications(for: newProtocol, using: compoundLibrary)
+    
+    /// Add a new protocol (unified model version)
+    func addTreatment(_ treatment: Treatment) {
+        // Save to Core Data
+        saveTreatment(treatment)
+        
+        // Select the newly added treatment
+        selectedTreatmentID = treatment.id
+        simulateTreatment(id: treatment.id)
+        
+        // Schedule notifications if it's a simple treatment
+        if treatment.treatmentType == .simple, 
+           notificationManager.notificationsEnabled,
+           let legacyProtocol = treatment.toLegacyProtocol() {
+            notificationManager.scheduleNotifications(for: legacyProtocol, using: compoundLibrary)
         }
-        print("Added protocol: \(newProtocol.name)")
+        
+        print("Added treatment: \(treatment.name)")
+    }
+    
+    /// Update an existing treatment (unified model version)
+    func updateTreatment(_ treatment: Treatment) {
+        // Save to Core Data
+        saveTreatment(treatment)
+        
+        // Update visualization if this is the selected treatment
+        if treatment.id == selectedTreatmentID {
+            simulateTreatment(id: treatment.id)
+        }
+        
+        // Update notifications if it's a simple treatment
+        if treatment.treatmentType == .simple, 
+           notificationManager.notificationsEnabled,
+           let legacyProtocol = treatment.toLegacyProtocol() {
+            notificationManager.scheduleNotifications(for: legacyProtocol, using: compoundLibrary)
+        }
+        
+        print("Updated treatment: \(treatment.name)")
+    }
+    
+    // MARK: - Legacy Protocol Management (Bridge Methods)
+    
+    /// Add a new protocol (legacy method)
+    @available(*, deprecated, message: "Use addTreatment(_:) instead")
+    func addProtocol(_ newProtocol: InjectionProtocol) {
+        // Convert to unified model
+        let treatment = Treatment(from: newProtocol)
+        
+        // Save as a unified treatment
+        addTreatment(treatment)
+        
+        // Update legacy protocol selection for backward compatibility
+        profile.protocols.append(newProtocol)
+        selectedProtocolID = newProtocol.id
+        recalcSimulation()
+        saveProfile()
+        
+        print("Added protocol (legacy): \(newProtocol.name)")
     }
 
+    /// Update an existing protocol (legacy method)
+    @available(*, deprecated, message: "Use updateTreatment(_:) instead")
     func updateProtocol(_ updatedProtocol: InjectionProtocol) {
+        // Update legacy protocol in profile for backward compatibility
         if let index = profile.protocols.firstIndex(where: { $0.id == updatedProtocol.id }) {
             profile.protocols[index] = updatedProtocol
+            
+            // Convert to unified model and update
+            let treatment = Treatment(from: updatedProtocol)
+            updateTreatment(treatment)
+            
+            // Update legacy simulation if needed
             if updatedProtocol.id == selectedProtocolID {
-                recalcSimulation() // Resimulate if the selected protocol was updated
+                recalcSimulation()
             }
-            saveProfile() // Prepare profile for saving
-            coreDataManager.saveContext() // Save immediately
-            // Update notifications for the modified protocol
-            if notificationManager.notificationsEnabled {
-                notificationManager.scheduleNotifications(for: updatedProtocol, using: compoundLibrary)
-            }
-            print("Updated protocol: \(updatedProtocol.name)")
+            
+            print("Updated protocol (legacy): \(updatedProtocol.name)")
         } else {
             print("Error: Protocol to update not found (ID: \(updatedProtocol.id))")
         }
     }
+    
+    // MARK: - Legacy Cycle Management (Bridge Methods)
+    
+    /// Add a new cycle and convert it to a unified treatment (legacy method)
+    @available(*, deprecated, message: "Use addTreatment(_:) with treatmentType = .advanced instead")
+    func addTreatmentFromCycle(_ cycle: Cycle) {
+        // Convert to unified model
+        let treatment = Treatment(from: cycle)
+        
+        // Save as a unified treatment
+        addTreatment(treatment)
+        
+        // Update legacy cycle selection for backward compatibility
+        saveCycle(cycle)
+        selectedCycleID = cycle.id
+        isCycleSimulationActive = true
+        simulateCycle(id: cycle.id)
+        
+        print("Added cycle and treatment (legacy): \(cycle.name)")
+    }
+    
+    /// Delete both a cycle and its corresponding treatment (bridge method)
+    @available(*, deprecated, message: "Use deleteTreatment(with:) instead")
+    func deleteCycleAndTreatment(with id: UUID) {
+        // Delete the cycle (legacy model)
+        deleteCycle(with: id)
+        
+        // Delete the corresponding treatment (unified model)
+        deleteTreatment(with: id)
+        
+        print("Deleted cycle and associated treatment with ID: \(id)")
+    }
+    
+    /// Select and visualize a cycle as a treatment (bridge method)
+    @available(*, deprecated, message: "Use selectTreatment(id:) instead")
+    func selectCycleAsTreatment(id: UUID?) {
+        guard let id = id else {
+            selectedCycleID = nil
+            selectedTreatmentID = nil
+            cycleSimulationData = []
+            treatmentSimulationData = []
+            isCycleSimulationActive = false
+            print("Cycle and treatment deselected.")
+            return
+        }
+        
+        // Only proceed if the selected ID exists in cycles
+        guard cycles.contains(where: { $0.id == id }) else {
+            print("Error: Attempted to select non-existent cycle ID: \(id)")
+            return
+        }
+        
+        // First, select the cycle for legacy visualization
+        selectCycle(id: id)
+        
+        // Then, find and select the corresponding treatment
+        if let treatment = treatments.first(where: { $0.id == id }) {
+            selectedTreatmentID = id
+            treatmentSimulationData = generateSimulationData(for: treatment)
+            print("Selected cycle as treatment: \(treatment.name)")
+        } else {
+            // If no matching treatment exists, create one
+            if let cycle = cycles.first(where: { $0.id == id }) {
+                let treatment = Treatment(from: cycle)
+                addTreatment(treatment)
+                print("Created and selected treatment from cycle: \(cycle.name)")
+            }
+        }
+    }
 
+    @available(*, deprecated, message: "Use deleteTreatment(with:) instead")
     func removeProtocol(at offsets: IndexSet) {
         let deletedProtocols = offsets.map { profile.protocols[$0] }
         let deletedIDs = deletedProtocols.map { $0.id }
@@ -330,13 +569,51 @@ class AppDataStore: ObservableObject {
         saveProfile() // Prepare profile for saving
         coreDataManager.saveContext() // Save immediately
 
+        // Also delete the corresponding treatments in the unified model
+        for id in deletedIDs {
+            deleteTreatment(with: id)
+        }
+
         // Cancel notifications for deleted protocols
         for item in deletedProtocols {
             notificationManager.cancelNotifications(for: item.id)
             print("Removed protocol: \(item.name)")
         }
     }
+    
+    @available(*, deprecated, message: "Use deleteTreatment(with:) instead")
+    func removeCycles(at offsets: IndexSet) {
+        let deletedCycles = offsets.map { cycles[$0] }
+        let deletedIDs = deletedCycles.map { $0.id }
+        
+        // Remove from cycles array
+        for index in offsets.sorted(by: >) {
+            if index < cycles.count {
+                cycles.remove(at: index)
+            }
+        }
+        
+        // Check if selected cycle was deleted
+        if let selectedID = selectedCycleID, deletedIDs.contains(selectedID) {
+            // Select the first remaining cycle, or none if list is empty
+            selectedCycleID = cycles.first?.id
+            if let newSelectedID = selectedCycleID {
+                simulateCycle(id: newSelectedID)
+            } else {
+                cycleSimulationData = []
+                isCycleSimulationActive = false
+            }
+        }
+        
+        // Delete from CoreData and unified model
+        for id in deletedIDs {
+            deleteCycleAndTreatment(with: id)
+        }
+        
+        print("Removed \(deletedCycles.count) cycles")
+    }
 
+    @available(*, deprecated, message: "Use selectTreatment(id:) instead")
     func selectProtocol(id: UUID?) { // Allow nil to deselect
         guard let id = id else {
              selectedProtocolID = nil
@@ -363,6 +640,19 @@ class AppDataStore: ObservableObject {
         if selectedProtocolID != id || simulationData.isEmpty {
             selectedProtocolID = id
             simulateProtocol(id: id) // Always simulate when protocol is explicitly selected
+            
+            // Also select the corresponding treatment in the unified model
+            if let treatment = treatments.first(where: { $0.id == id }) {
+                selectedTreatmentID = id
+                treatmentSimulationData = generateSimulationData(for: treatment)
+            } else {
+                // If no corresponding treatment exists, create one
+                if let protocol_ = profile.protocols.first(where: { $0.id == id }) {
+                    let treatment = Treatment(from: protocol_)
+                    addTreatment(treatment)
+                }
+            }
+            
             print("Selected protocol: \(profile.protocols.first { $0.id == id }?.name ?? "Unknown")")
         }
     }
@@ -980,9 +1270,16 @@ class AppDataStore: ObservableObject {
     }
 
     // MARK: - Adherence Tracking Interface
+    // Legacy method for backward compatibility
+    @available(*, deprecated, message: "Use acknowledgeInjection(treatmentID:injectionDate:) instead")
     func acknowledgeInjection(protocolID: UUID, injectionDate: Date) {
-        notificationManager.acknowledgeInjection(protocolID: protocolID, injectionDate: injectionDate)
-        print("Acknowledged injection for protocol \(protocolID) scheduled on \(injectionDate)")
+        acknowledgeInjection(treatmentID: protocolID, injectionDate: injectionDate)
+    }
+    
+    // New method using unified treatment model terminology
+    func acknowledgeInjection(treatmentID: UUID, injectionDate: Date) {
+        notificationManager.acknowledgeInjection(treatmentID: treatmentID, injectionDate: injectionDate)
+        print("Acknowledged injection for treatment \(treatmentID) scheduled on \(injectionDate)")
     }
 
     func adherenceStats() -> (total: Int, onTime: Int, late: Int, missed: Int) {
@@ -993,15 +1290,273 @@ class AppDataStore: ObservableObject {
         return notificationManager.adherencePercentage()
     }
 
+    // Legacy method for backward compatibility
+    @available(*, deprecated, message: "Use injectionHistory(for:treatmentType:) instead")
     func injectionHistory(for protocolID: UUID? = nil) -> [NotificationManager.InjectionRecord] {
         return notificationManager.injectionHistory(for: protocolID)
+    }
+    
+    // New method supporting unified treatment model
+    func injectionHistory(for treatmentID: UUID? = nil, treatmentType: String? = nil) -> [NotificationManager.InjectionRecord] {
+        return notificationManager.injectionHistory(for: treatmentID, treatmentType: treatmentType)
     }
 
     func cleanupOldRecords() {
         notificationManager.cleanupOldRecords()
         print("Cleaned up old injection records.")
     }
+    
+    /// Schedule notifications for a treatment using the unified treatment model
+    func scheduleNotificationsForTreatment(_ treatment: Treatment) {
+        notificationManager.scheduleNotifications(for: treatment, using: compoundLibrary)
+        print("Scheduled notifications for treatment: \(treatment.name)")
+    }
 
+    // MARK: - Unified Treatment Management
+    func loadTreatmentsFromCoreData() {
+        let context = coreDataManager.persistentContainer.viewContext
+        let fetchRequest = NSFetchRequest<CDTreatment>(entityName: "CDTreatment")
+        fetchRequest.sortDescriptors = [NSSortDescriptor(key: "startDate", ascending: false)]
+        
+        do {
+            let cdTreatments = try context.fetch(fetchRequest)
+            let loadedTreatments = cdTreatments.compactMap { Treatment(from: $0) }
+            self.treatments = loadedTreatments
+            
+            // If we have treatments but nothing is selected, select the first one
+            if !treatments.isEmpty && selectedTreatmentID == nil {
+                selectedTreatmentID = treatments.first?.id
+            }
+            
+            // Generate visualization for selected treatment
+            if let treatmentID = selectedTreatmentID, 
+               let treatment = treatments.first(where: { $0.id == treatmentID }) {
+                generateVisualizationForTreatment(treatment)
+            }
+            
+            print("Loaded \(self.treatments.count) treatments from Core Data.")
+        } catch {
+            print("Error fetching treatments from CoreData: \(error)")
+        }
+    }
+    
+    func saveTreatment(_ treatment: Treatment) {
+        let context = coreDataManager.persistentContainer.viewContext
+        
+        // Save treatment to Core Data
+        let cdTreatment = treatment.saveToCD(context: context)
+        
+        // Associate with user profile if not already
+        if cdTreatment.userProfile == nil {
+            // Fetch user profile
+            let fetchRequest: NSFetchRequest<CDUserProfile> = CDUserProfile.fetchRequest()
+            do {
+                if let userProfile = try context.fetch(fetchRequest).first {
+                    cdTreatment.userProfile = userProfile
+                    userProfile.addToTreatments(cdTreatment)
+                }
+            } catch {
+                print("Error fetching user profile: \(error)")
+            }
+        }
+        
+        do {
+            try context.save()
+            // Refresh treatments from Core Data
+            loadTreatmentsFromCoreData()
+            print("Saved treatment: \(treatment.name)")
+        } catch {
+            print("Error saving treatment \(treatment.name): \(error)")
+        }
+    }
+    
+    func deleteTreatment(with id: UUID) {
+        let context = coreDataManager.persistentContainer.viewContext
+        let fetchRequest = NSFetchRequest<CDTreatment>(entityName: "CDTreatment")
+        fetchRequest.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+        
+        do {
+            if let cdTreatment = try context.fetch(fetchRequest).first {
+                let treatmentName = cdTreatment.name ?? "Unknown"
+                context.delete(cdTreatment)
+                try context.save()
+                // Refresh treatments from Core Data
+                loadTreatmentsFromCoreData()
+                // If this was the selected treatment, deselect it
+                if selectedTreatmentID == id {
+                    selectedTreatmentID = nil
+                    // Clear visualization data
+                    simulationData = []
+                }
+                print("Deleted treatment: \(treatmentName)")
+            }
+        } catch {
+            print("Error deleting treatment: \(error)")
+        }
+    }
+    
+    // MARK: - Unified Treatment Simulation
+    
+    /// Selects a treatment by ID and simulates it
+    func selectTreatment(id: UUID?) {
+        guard let id = id else {
+            selectedTreatmentID = nil
+            treatmentSimulationData = []
+            print("Treatment deselected.")
+            return
+        }
+        
+        // Verify the treatment exists
+        guard treatments.contains(where: { $0.id == id }) else {
+            print("Error: Attempted to select non-existent treatment ID: \(id)")
+            // Optionally select the first available treatment if selection is invalid
+            if let firstID = treatments.first?.id {
+                selectedTreatmentID = firstID
+                simulateTreatment(id: firstID)
+            } else {
+                selectedTreatmentID = nil
+                treatmentSimulationData = []
+            }
+            return
+        }
+        
+        // Only simulate if selection changed or no simulation data exists
+        if selectedTreatmentID != id || treatmentSimulationData.isEmpty {
+            selectedTreatmentID = id
+            simulateTreatment(id: id)
+            print("Selected treatment: \(treatments.first { $0.id == id }?.name ?? "Unknown")")
+        }
+    }
+    
+    /// Simulates a treatment by ID
+    func simulateTreatment(id: UUID) {
+        guard let treatment = treatments.first(where: { $0.id == id }) else {
+            print("SimulateTreatment Error: Treatment with ID \(id) not found.")
+            treatmentSimulationData = []
+            return
+        }
+        
+        // Generate visualization data for the treatment
+        treatmentSimulationData = generateSimulationData(for: treatment)
+        print("Simulation generated for treatment: \(treatment.name) with \(treatmentSimulationData.count) data points")
+    }
+    
+    /// Generates simulation data for a unified Treatment
+    func generateSimulationData(for treatment: Treatment) -> [DataPoint] {
+        // Determine start and end dates for simulation
+        let startDate = treatment.startDate
+        let endDate = treatment.endDate
+        
+        // Generate data points for the date range
+        let calendar = Calendar.current
+        let daysBetween = calendar.dateComponents([.day], from: startDate, to: endDate).day ?? 90
+        
+        // For simple treatments
+        if treatment.treatmentType == .simple {
+            if let compound = findCompoundForTreatment(treatment),
+               let doseMg = treatment.doseMg,
+               let frequencyDays = treatment.frequencyDays,
+               let route = treatment.selectedRoute.flatMap({ Compound.Route(rawValue: $0) }) {
+                
+                // Generate injection dates
+                let injectionDates = treatment.injectionDates(from: startDate, upto: endDate)
+                
+                // Calculate time points with dynamic interval based on frequency
+                let interval = max(0.25, frequencyDays / 16.0) // Minimum 6 hours (0.25 days)
+                let simulationDates = generateSimulationDates(
+                    startDate: startDate,
+                    endDate: endDate,
+                    interval: interval
+                )
+                
+                // For blends, we need to calculate the contribution of each component
+                var compounds: [(compound: Compound, dosePerInjectionMg: Double)] = []
+                
+                if let compoundID = treatment.compoundID {
+                    // Simple compound treatment
+                    compounds = [(compound: compound, dosePerInjectionMg: doseMg)]
+                } else if let blendID = treatment.blendID, 
+                          let blend = compoundLibrary.blend(withID: blendID) {
+                    // Blend treatment
+                    let resolvedComponents = blend.resolvedComponents(using: compoundLibrary)
+                    
+                    guard blend.totalConcentration > 0 else {
+                        print("Error: Blend has zero total concentration.")
+                        return []
+                    }
+                    
+                    compounds = resolvedComponents.map {
+                        (compound: $0.compound, dosePerInjectionMg: $0.mgPerML * doseMg / blend.totalConcentration)
+                    }
+                }
+                
+                if compounds.isEmpty {
+                    print("Error: No valid compounds found for treatment \(treatment.name)")
+                    return []
+                }
+                
+                // Call the PK model to calculate concentrations
+                let concentrations = pkModel.protocolConcentrations(
+                    at: simulationDates,
+                    injectionDates: injectionDates,
+                    compounds: compounds,
+                    route: route,
+                    weight: profile.weight ?? 70.0,
+                    calibrationFactor: profile.calibrationFactor
+                )
+                
+                // Create data points
+                return zip(simulationDates, concentrations).map { 
+                    DataPoint(time: $0, level: $1.isNaN ? 0 : $1)
+                }
+            }
+        } else if treatment.treatmentType == .advanced, let stages = treatment.stages {
+            // For advanced treatments, use the visualization model
+            let visualizationFactory = VisualizationFactory(
+                compoundLibrary: compoundLibrary,
+                pkModel: pkModel
+            )
+            
+            let model = visualizationFactory.createVisualization(
+                for: treatment,
+                weight: profile.weight ?? 70.0,
+                calibrationFactor: profile.calibrationFactor,
+                unit: profile.unit
+            )
+            
+            // Return the total curve layer if it exists
+            if let totalLayer = model.layers.first(where: { $0.type == .totalCurve }) {
+                return totalLayer.data
+            }
+        }
+        
+        // Return empty array if simulation failed
+        return []
+    }
+    
+    /// Legacy method for generating visualization data for a treatment
+    /// This method updates the simulationData property directly for backward compatibility
+    @available(*, deprecated, message: "Use generateSimulationData(for:) and selectTreatment(id:) instead")
+    func generateVisualizationForTreatment(_ treatment: Treatment) {
+        // Use the new method but store in the legacy simulationData property
+        simulationData = generateSimulationData(for: treatment)
+        print("Generated visualization with \(simulationData.count) data points for treatment \(treatment.name)")
+    }
+    
+    private func findCompoundForTreatment(_ treatment: Treatment) -> Compound? {
+        if let compoundID = treatment.compoundID {
+            return compoundLibrary.compound(withID: compoundID)
+        } else if let blendID = treatment.blendID, 
+                  let blend = compoundLibrary.blend(withID: blendID),
+                  let firstComponent = blend.components.first {
+            // For blends, just return the first compound for now
+            // A more sophisticated implementation would handle all components
+            // Note: VialBlend.Component.compoundID is not optional
+            return compoundLibrary.compound(withID: firstComponent.compoundID)
+        }
+        return nil
+    }
+    
     // MARK: - Cycle Management
     func loadCyclesFromCoreData() {
         let context = coreDataManager.persistentContainer.viewContext
@@ -1262,6 +1817,29 @@ class AppDataStore: ObservableObject {
         for p in profile.protocols {
             notificationManager.scheduleNotifications(for: p, using: compoundLibrary)
         }
+        
+        // Schedule notifications for simple treatments
+        await scheduleNotificationsForTreatments()
+        
         print("Notification scheduling complete.")
+    }
+    
+    /// Schedule notifications for all simple treatments
+    func scheduleNotificationsForTreatments() async {
+        guard notificationManager.notificationsEnabled else { return }
+        
+        // Get all simple treatments
+        let simpleTreatments = treatments.filter { $0.treatmentType == .simple }
+        print("Scheduling notifications for \(simpleTreatments.count) simple treatments...")
+        
+        for treatment in simpleTreatments {
+            // Only schedule if frequency and dose are set
+            if treatment.frequencyDays != nil && treatment.doseMg != nil {
+                // Convert to legacy protocol for now since NotificationManager works with protocols
+                if let legacyProtocol = treatment.toLegacyProtocol() {
+                    notificationManager.scheduleNotifications(for: legacyProtocol, using: compoundLibrary)
+                }
+            }
+        }
     }
 } // End of AppDataStore class

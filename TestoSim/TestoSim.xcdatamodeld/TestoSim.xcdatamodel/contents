@@ -6,6 +6,7 @@
         <attribute name="unit" optional="YES" attributeType="String"/>
         <attribute name="value" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
         <relationship name="injectionProtocol" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="CDInjectionProtocol" inverseName="bloodSamples" inverseEntity="CDInjectionProtocol"/>
+        <relationship name="treatment" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="CDTreatment" inverseName="bloodSamples" inverseEntity="CDTreatment"/>
         <fetchedProperty name="fetchedProperty" optional="YES">
             <fetchRequest name="fetchedPropertyFetchRequest" entity="CDBloodSample"/>
         </fetchedProperty>
@@ -50,6 +51,31 @@
         <relationship name="ester" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="CDCompound" inverseName="protocols" inverseEntity="CDCompound"/>
         <relationship name="profile" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="CDUserProfile" inverseName="protocols" inverseEntity="CDUserProfile"/>
     </entity>
+    <entity name="CDTreatment" representedClassName="CDTreatment" syncable="YES" codeGenerationType="category">
+        <attribute name="blendID" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="compoundID" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="doseMg" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <attribute name="frequencyDays" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="name" optional="YES" attributeType="String"/>
+        <attribute name="notes" optional="YES" attributeType="String"/>
+        <attribute name="selectedRoute" optional="YES" attributeType="String"/>
+        <attribute name="startDate" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="totalWeeks" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="treatmentType" optional="YES" attributeType="String"/>
+        <relationship name="bloodSamples" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="CDBloodSample" inverseName="treatment" inverseEntity="CDBloodSample"/>
+        <relationship name="stages" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="CDTreatmentStage" inverseName="treatment" inverseEntity="CDTreatmentStage"/>
+        <relationship name="userProfile" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="CDUserProfile" inverseName="treatments" inverseEntity="CDUserProfile"/>
+    </entity>
+    <entity name="CDTreatmentStage" representedClassName="CDTreatmentStage" syncable="YES" codeGenerationType="category">
+        <attribute name="blendsData" optional="YES" attributeType="Binary"/>
+        <attribute name="compoundsData" optional="YES" attributeType="Binary"/>
+        <attribute name="durationWeeks" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="name" optional="YES" attributeType="String"/>
+        <attribute name="startWeek" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <relationship name="treatment" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="CDTreatment" inverseName="stages" inverseEntity="CDTreatmentStage"/>
+    </entity>
     <entity name="CDUserProfile" representedClassName="CDUserProfile" syncable="YES" codeGenerationType="category">
         <attribute name="biologicalSex" optional="YES" attributeType="String"/>
         <attribute name="calibrationFactor" optional="YES" attributeType="Double" defaultValueString="1.0" usesScalarValueType="YES"/>
@@ -63,6 +89,7 @@
         <attribute name="weight" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
         <relationship name="cycles" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="CDCycle" inverseName="userProfile" inverseEntity="CDCycle"/>
         <relationship name="protocols" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="CDInjectionProtocol" inverseName="profile" inverseEntity="CDInjectionProtocol"/>
+        <relationship name="treatments" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="CDTreatment" inverseName="userProfile" inverseEntity="CDTreatment"/>
     </entity>
     <entity name="CDVialBlend" representedClassName="CDVialBlend" syncable="YES" codeGenerationType="category">
         <attribute name="blendDescription" optional="YES" attributeType="String"/>

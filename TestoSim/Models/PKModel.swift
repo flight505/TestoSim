@@ -67,9 +67,6 @@ struct PKModel {
         // Elimination rate constant (ke) = ln(2)/t_1/2
         let ke = log(2) / halfLifeDays
         
-        // Calculate clearance (CL) with allometric scaling
-        let clearance = PKModel.defaultClearance70kg * pow(weight / 70.0, 0.75) // Use 0.75 power for clearance
-        
         // Calculate volume of distribution with allometric scaling
         let vd = PKModel.defaultVolumeOfDistribution70kg * pow(weight / 70.0, 1.0)
         
@@ -121,7 +118,9 @@ struct PKModel {
         
         if abs(k12 + ke - k21) < 0.001 {
             // Handle special case where eigenvalues are very close
-            alpha = beta = (k12 + k21 + ke) / 2
+            let eigenvalue = (k12 + k21 + ke) / 2
+            alpha = eigenvalue
+            beta = eigenvalue
             
             // Use one-compartment model for this special case
             let oneCompResult = oneCompartmentBolus(
@@ -200,9 +199,6 @@ struct PKModel {
     /// - Parameter weight: Patient weight in kg
     /// - Returns: Baseline concentration
     private func calculateBaselineConcentration(weight: Double) -> Double {
-        // Calculate volume of distribution with allometric scaling
-        let vd = PKModel.defaultVolumeOfDistribution70kg * pow(weight / 70.0, 1.0)
-        
         // Calculate clearance with allometric scaling
         let clearance = PKModel.defaultClearance70kg * pow(weight / 70.0, 0.75)
         

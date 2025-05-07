@@ -23,6 +23,12 @@ class TreatmentViewModel: ObservableObject {
     @Published var visualizationModel: VisualizationModel?
     @Published var visualizationStatistics: VisualizationStatistics?
     
+    // Callback functions for AppDataStore integration
+    var addTreatmentCallback: ((Treatment) -> Void)?
+    var updateTreatmentCallback: ((Treatment) -> Void)?
+    var deleteTreatmentCallback: ((Treatment) -> Void)?
+    var selectTreatmentCallback: ((UUID?) -> Void)?
+    
     // Dependencies
     private let coreDataManager: CoreDataManager
     private let compoundLibrary: CompoundLibrary
@@ -78,7 +84,7 @@ class TreatmentViewModel: ObservableObject {
     /// Load treatments from the unified CDTreatment entity
     private func loadUnifiedTreatments() -> [Treatment] {
         let context = coreDataManager.persistentContainer.viewContext
-        let fetchRequest: NSFetchRequest<CDTreatment> = CDTreatment.fetchRequest()
+        let fetchRequest = NSFetchRequest<CDTreatment>(entityName: "CDTreatment")
         fetchRequest.sortDescriptors = [NSSortDescriptor(key: "startDate", ascending: false)]
         
         do {
@@ -139,6 +145,13 @@ class TreatmentViewModel: ObservableObject {
     
     /// Add a new treatment
     func addTreatment(_ treatment: Treatment) {
+        // If callback is set, use it (AppDataStore integration)
+        if let callback = addTreatmentCallback {
+            callback(treatment)
+            return
+        }
+        
+        // Default implementation when not using AppDataStore
         // Add to the local array
         treatments.append(treatment)
         
@@ -161,6 +174,13 @@ class TreatmentViewModel: ObservableObject {
     
     /// Update an existing treatment
     func updateTreatment(_ treatment: Treatment) {
+        // If callback is set, use it (AppDataStore integration)
+        if let callback = updateTreatmentCallback {
+            callback(treatment)
+            return
+        }
+        
+        // Default implementation when not using AppDataStore
         // Update in the local array
         if let index = treatments.firstIndex(where: { $0.id == treatment.id }) {
             treatments[index] = treatment
@@ -196,6 +216,13 @@ class TreatmentViewModel: ObservableObject {
     
     /// Delete a treatment
     func deleteTreatment(_ treatment: Treatment) {
+        // If callback is set, use it (AppDataStore integration)
+        if let callback = deleteTreatmentCallback {
+            callback(treatment)
+            return
+        }
+        
+        // Default implementation when not using AppDataStore
         // Remove from the local arrays
         treatments.removeAll { $0.id == treatment.id }
         simpleTreatments.removeAll { $0.id == treatment.id }
@@ -203,8 +230,7 @@ class TreatmentViewModel: ObservableObject {
         
         // Delete from Core Data
         let context = coreDataManager.persistentContainer.viewContext
-        let fetchRequest: NSFetchRequest<CDTreatment> = CDTreatment.fetchRequest()
-        fetchRequest.predicate = NSPredicate(format: "id == %@", treatment.id as CVarArg)
+        let fetchRequest = CDTreatment.fetchRequestWithID(treatment.id)
         
         do {
             if let cdTreatment = try context.fetch(fetchRequest).first {
@@ -244,6 +270,13 @@ class TreatmentViewModel: ObservableObject {
     
     /// Select a treatment and generate its visualization
     func selectTreatment(id: UUID?) {
+        // If callback is set, use it (AppDataStore integration)
+        if let callback = selectTreatmentCallback {
+            callback(id)
+            return
+        }
+        
+        // Default implementation when not using AppDataStore
         guard let id = id else {
             selectedTreatmentID = nil
             visualizationModel = nil
@@ -290,6 +323,20 @@ class TreatmentViewModel: ObservableObject {
     func updateLayerOpacity(layerID: UUID, opacity: Double) {
         guard var model = visualizationModel else { return }
         model.updateLayerOpacity(id: layerID, opacity: opacity)
+        visualizationModel = model
+    }
+    
+    /// Move a layer up in the visualization order (rendered on top)
+    func moveLayerUp(layerID: UUID) {
+        guard var model = visualizationModel else { return }
+        model.moveLayerUp(id: layerID)
+        visualizationModel = model
+    }
+    
+    /// Move a layer down in the visualization order (rendered below)
+    func moveLayerDown(layerID: UUID) {
+        guard var model = visualizationModel else { return }
+        model.moveLayerDown(id: layerID)
         visualizationModel = model
     }
     

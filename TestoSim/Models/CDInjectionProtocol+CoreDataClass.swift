@@ -10,6 +10,7 @@ import Foundation
 import CoreData
 
 @objc(CDInjectionProtocol)
+@available(*, deprecated, message: "Use CDTreatment with treatmentType = 'simple' instead")
 public class CDInjectionProtocol: NSManagedObject {
 
 } 

@@ -50,6 +50,12 @@ struct TreatmentVisualizationView: View {
                             onChangeOpacity: { layerId, opacity in
                                 viewModel.updateLayerOpacity(layerID: layerId, opacity: opacity)
                             },
+                            onMoveLayerUp: { layerId in
+                                viewModel.moveLayerUp(layerID: layerId)
+                            },
+                            onMoveLayerDown: { layerId in
+                                viewModel.moveLayerDown(layerID: layerId)
+                            },
                             onDismiss: {
                                 showingLayerControls = false
                             }
@@ -143,6 +149,8 @@ struct LayerControlsOverlay: View {
     let model: VisualizationModel
     let onToggleVisibility: (UUID, Bool) -> Void
     let onChangeOpacity: (UUID, Double) -> Void
+    let onMoveLayerUp: (UUID) -> Void
+    let onMoveLayerDown: (UUID) -> Void
     let onDismiss: () -> Void
     
     var body: some View {
@@ -188,6 +196,12 @@ struct LayerControlsOverlay: View {
                                 },
                                 onChangeOpacity: { opacity in
                                     onChangeOpacity(layer.id, opacity)
+                                },
+                                onMoveUp: {
+                                    onMoveLayerUp(layer.id)
+                                },
+                                onMoveDown: {
+                                    onMoveLayerDown(layer.id)
                                 }
                             )
                         }
@@ -208,14 +222,20 @@ struct LayerControlRow: View {
     let layer: VisualizationModel.Layer
     let onToggleVisibility: (Bool) -> Void
     let onChangeOpacity: (Double) -> Void
+    let onMoveUp: () -> Void
+    let onMoveDown: () -> Void
     @State private var opacity: Double
     
     init(layer: VisualizationModel.Layer, 
          onToggleVisibility: @escaping (Bool) -> Void,
-         onChangeOpacity: @escaping (Double) -> Void) {
+         onChangeOpacity: @escaping (Double) -> Void,
+         onMoveUp: @escaping () -> Void,
+         onMoveDown: @escaping () -> Void) {
         self.layer = layer
         self.onToggleVisibility = onToggleVisibility
         self.onChangeOpacity = onChangeOpacity
+        self.onMoveUp = onMoveUp
+        self.onMoveDown = onMoveDown
         self._opacity = State(initialValue: layer.opacity)
     }
     
@@ -231,6 +251,24 @@ struct LayerControlRow: View {
                     .font(.subheadline)
                 
                 Spacer()
+                
+                // Layer ordering buttons
+                HStack(spacing: 4) {
+                    Button(action: onMoveUp) {
+                        Image(systemName: "arrow.up")
+                            .font(.caption)
+                            .foregroundColor(.blue)
+                    }
+                    .disabled(false) // Could be controlled based on layer position
+                    
+                    Button(action: onMoveDown) {
+                        Image(systemName: "arrow.down")
+                            .font(.caption)
+                            .foregroundColor(.blue)
+                    }
+                    .disabled(false) // Could be controlled based on layer position
+                }
+                .padding(.trailing, 8)
                 
                 Toggle("", isOn: Binding(
                     get: { layer.isVisible },

@@ -86,12 +86,131 @@ class OpenAIService: ObservableObject {
         UserDefaults.standard.set(useTestKey, forKey: "use_test_api_key")
     }
     
-    /// Generate protocol insights using the OpenAI API
+    /// Generate insights for a treatment using the OpenAI API
+    /// - Parameters:
+    ///   - treatment: The treatment to analyze
+    ///   - profile: User profile information
+    ///   - simulationData: Pharmacokinetic simulation data
+    ///   - compoundLibrary: Access to compound information
+    ///   - completion: Callback with the result
+    func generateInsights(
+        for treatment: Treatment,
+        profile: UserProfile,
+        simulationData: [DataPoint],
+        compoundLibrary: CompoundLibrary,
+        completion: @escaping (Result<Insights, Error>) -> Void
+    ) {
+        // Ensure this is a simple treatment
+        guard treatment.treatmentType == .simple else {
+            // For advanced treatments, use the advanced version
+            if treatment.treatmentType == .advanced {
+                generateAdvancedTreatmentInsights(
+                    for: treatment,
+                    profile: profile,
+                    simulationData: simulationData,
+                    compoundLibrary: compoundLibrary,
+                    completion: completion
+                )
+            } else {
+                // Invalid treatment type
+                let error = NSError(domain: "OpenAIService", code: 0, 
+                                   userInfo: [NSLocalizedDescriptionKey: "Invalid treatment type"])
+                completion(.failure(error))
+            }
+            return
+        }
+        
+        // Build the chat message content
+        let content = buildTreatmentPrompt(
+            treatment: treatment,
+            profile: profile,
+            simulationData: simulationData,
+            compoundLibrary: compoundLibrary
+        )
+        
+        // Create the request
+        makeCompletionRequest(content: content) { result in
+            switch result {
+            case .success(let jsonResponse):
+                do {
+                    // Parse the insights from the response
+                    let insights = try self.parseInsightsFromResponse(jsonResponse, forTreatment: treatment)
+                    completion(.success(insights))
+                } catch {
+                    completion(.failure(error))
+                }
+            case .failure(let error):
+                completion(.failure(error))
+            }
+        }
+    }
+    
+    /// Generate insights for an advanced treatment using the OpenAI API
+    /// - Parameters:
+    ///   - treatment: The advanced treatment to analyze
+    ///   - profile: User profile information
+    ///   - simulationData: Pharmacokinetic simulation data
+    ///   - compoundLibrary: Access to compound information
+    ///   - completion: Callback with the result
+    func generateAdvancedTreatmentInsights(
+        for treatment: Treatment,
+        profile: UserProfile,
+        simulationData: [DataPoint],
+        compoundLibrary: CompoundLibrary,
+        completion: @escaping (Result<Insights, Error>) -> Void
+    ) {
+        // Ensure this is an advanced treatment
+        guard treatment.treatmentType == .advanced else {
+            // For simple treatments, use the simple version
+            if treatment.treatmentType == .simple {
+                generateInsights(
+                    for: treatment,
+                    profile: profile,
+                    simulationData: simulationData,
+                    compoundLibrary: compoundLibrary,
+                    completion: completion
+                )
+            } else {
+                // Invalid treatment type
+                let error = NSError(domain: "OpenAIService", code: 0, 
+                                   userInfo: [NSLocalizedDescriptionKey: "Invalid treatment type"])
+                completion(.failure(error))
+            }
+            return
+        }
+        
+        // Build the chat message content
+        let content = buildAdvancedTreatmentPrompt(
+            treatment: treatment,
+            profile: profile,
+            simulationData: simulationData,
+            compoundLibrary: compoundLibrary
+        )
+        
+        // Create the request
+        makeCompletionRequest(content: content) { result in
+            switch result {
+            case .success(let jsonResponse):
+                do {
+                    // Parse the insights from the response
+                    let insights = try self.parseInsightsFromResponse(jsonResponse, forTreatment: treatment)
+                    completion(.success(insights))
+                } catch {
+                    completion(.failure(error))
+                }
+            case .failure(let error):
+                completion(.failure(error))
+            }
+        }
+    }
+    
+    /// Generate protocol insights using the OpenAI API (Legacy method)
     /// - Parameters:
     ///   - protocol: The protocol to analyze
     ///   - profile: User profile information
     ///   - simulationData: Pharmacokinetic simulation data
     ///   - completion: Callback with the result
+    @available(*, deprecated, message: "Use generateInsights(for:) instead")
     func generateProtocolInsights(
         treatmentProtocol: InjectionProtocol,
         profile: UserProfile,
@@ -99,37 +218,26 @@ class OpenAIService: ObservableObject {
         compoundLibrary: CompoundLibrary,
         completion: @escaping (Result<Insights, Error>) -> Void
     ) {
-        // Build the chat message content
-        let content = buildProtocolPrompt(
-            treatmentProtocol: treatmentProtocol,
+        // Convert legacy protocol to unified Treatment model
+        let treatment = Treatment(from: treatmentProtocol)
+        
+        // Use new method
+        generateInsights(
+            for: treatment,
             profile: profile,
             simulationData: simulationData,
-            compoundLibrary: compoundLibrary
+            compoundLibrary: compoundLibrary,
+            completion: completion
         )
-        
-        // Create the request
-        makeCompletionRequest(content: content) { result in
-            switch result {
-            case .success(let jsonResponse):
-                do {
-                    // Parse the insights from the response
-                    let insights = try self.parseInsightsFromResponse(jsonResponse, forProtocol: treatmentProtocol)
-                    completion(.success(insights))
-                } catch {
-                    completion(.failure(error))
-                }
-            case .failure(let error):
-                completion(.failure(error))
-            }
-        }
     }
     
-    /// Generate cycle insights using the OpenAI API
+    /// Generate cycle insights using the OpenAI API (Legacy method)
     /// - Parameters:
     ///   - cycle: The cycle to analyze
     ///   - profile: User profile information
     ///   - simulationData: Pharmacokinetic simulation data
     ///   - completion: Callback with the result
+    @available(*, deprecated, message: "Use generateAdvancedTreatmentInsights(for:) instead")
     func generateCycleInsights(
         cycle: Cycle,
         profile: UserProfile,
@@ -137,48 +245,42 @@ class OpenAIService: ObservableObject {
         compoundLibrary: CompoundLibrary,
         completion: @escaping (Result<Insights, Error>) -> Void
     ) {
-        // Build the chat message content
-        let content = buildCyclePrompt(
-            cycle: cycle,
+        // Convert legacy cycle to unified Treatment model
+        let treatment = Treatment(from: cycle)
+        
+        // Use new method
+        generateAdvancedTreatmentInsights(
+            for: treatment,
             profile: profile,
             simulationData: simulationData,
-            compoundLibrary: compoundLibrary
+            compoundLibrary: compoundLibrary,
+            completion: completion
         )
-        
-        // Create the request
-        makeCompletionRequest(content: content) { result in
-            switch result {
-            case .success(let jsonResponse):
-                do {
-                    // Parse the insights from the response
-                    let insights = try self.parseInsightsFromResponse(jsonResponse, forCycle: cycle)
-                    completion(.success(insights))
-                } catch {
-                    completion(.failure(error))
-                }
-            case .failure(let error):
-                completion(.failure(error))
-            }
-        }
     }
     
     // MARK: - Private Methods
     
-    /// Build the prompt for protocol insights
-    private func buildProtocolPrompt(
-        treatmentProtocol: InjectionProtocol,
+    /// Build the prompt for treatment insights
+    private func buildTreatmentPrompt(
+        treatment: Treatment,
         profile: UserProfile,
         simulationData: [DataPoint],
         compoundLibrary: CompoundLibrary
     ) -> String {
-        // Extract protocol details
-        let protocolType = treatmentProtocol.protocolType
-        let protocolName = treatmentProtocol.name
+        // Ensure this is a simple treatment
+        guard treatment.treatmentType == .simple,
+              let contentType = treatment.contentType,
+              let doseMg = treatment.doseMg,
+              let frequencyDays = treatment.frequencyDays else {
+            return "Error: Invalid treatment data"
+        }
+        // Extract treatment details
+        let treatmentName = treatment.name
         var compoundOrBlendName = "Unknown"
         var compoundInfo = ""
         
         // Get compound or blend information
-        if protocolType == .compound, let compoundID = treatmentProtocol.compoundID,
+        if contentType == .compound, let compoundID = treatment.compoundID,
            let compound = compoundLibrary.compounds.first(where: { $0.id == compoundID }) {
             compoundOrBlendName = compound.commonName
             if let ester = compound.ester {
@@ -189,7 +291,7 @@ class OpenAIService: ObservableObject {
             Ester: \(compound.ester ?? "None")
             Half-life: \(compound.halfLifeDays) days
             """
-        } else if protocolType == .blend, let blendID = treatmentProtocol.blendID,
+        } else if contentType == .blend, let blendID = treatment.blendID,
                   let blend = compoundLibrary.blends.first(where: { $0.id == blendID }) {
             compoundOrBlendName = blend.name
             compoundInfo = """
@@ -219,7 +321,7 @@ class OpenAIService: ObservableObject {
         // Build the prompt
         return """
         You are a specialized AI assistant for TestoSim, a hormone therapy simulation app. 
-        Analyze the following protocol and simulation data, and provide insights in the specified JSON format.
+        Analyze the following treatment and simulation data, and provide insights in the specified JSON format.
         
         USER PROFILE:
         Weight: \(profile.weight ?? 0) kg
@@ -227,13 +329,13 @@ class OpenAIService: ObservableObject {
         Age: \(profile.age ?? 0)
         Biological sex: \(profile.biologicalSex.rawValue)
         
-        PROTOCOL DETAILS:
-        Name: \(protocolName)
-        Type: \(protocolType.rawValue)
+        TREATMENT DETAILS:
+        Name: \(treatmentName)
+        Type: \(contentType.rawValue)
         \(compoundInfo)
-        Dose: \(treatmentProtocol.doseMg) mg
-        Frequency: Every \(treatmentProtocol.frequencyDays) days
-        Route: \(treatmentProtocol.selectedRoute ?? "intramuscular")
+        Dose: \(doseMg) mg
+        Frequency: Every \(frequencyDays) days
+        Route: \(treatment.selectedRoute ?? "intramuscular")
         
         SIMULATION STATISTICS:
         Average Level: \(avgLevel) ng/dL
@@ -242,14 +344,14 @@ class OpenAIService: ObservableObject {
         Fluctuation: \(fluctuation)%
         
         BLOOD SAMPLES:
-        \(treatmentProtocol.bloodSamples.map { "Date: \($0.date), Value: \($0.value) \($0.unit)" }.joined(separator: "\n"))
+        \(treatment.bloodSamples?.map { "Date: \($0.date), Value: \($0.value) \($0.unit)" }.joined(separator: "\n") ?? "No blood samples")
         
         Based on this information, provide insights about the protocol in the following JSON format:
         
         {
-            "title": "Insights for [Protocol Name]",
-            "summary": "A concise summary of the protocol analysis.",
-            "blendExplanation": "Detailed explanation of what's in the blend and how it behaves over time (only for blend protocols, null otherwise).",
+            "title": "Insights for [Treatment Name]",
+            "summary": "A concise summary of the treatment analysis.",
+            "blendExplanation": "Detailed explanation of what's in the blend and how it behaves over time (only for blend treatments, null otherwise).",
             "keyPoints": [
                 {
                     "title": "Short, specific point title",
@@ -262,25 +364,71 @@ class OpenAIService: ObservableObject {
         Focus on practical insights about:
         1. Dosing frequency and stability
         2. Level fluctuations and their implications
-        3. Potential optimizations to the protocol
+        3. Potential optimizations to the treatment
         4. Educational content about the compounds or blend
         """
     }
     
-    /// Build the prompt for cycle insights
+    /// Build the prompt for legacy cycle insights
+    @available(*, deprecated, message: "Use buildAdvancedTreatmentPrompt instead")
     private func buildCyclePrompt(
         cycle: Cycle,
         profile: UserProfile,
         simulationData: [DataPoint],
         compoundLibrary: CompoundLibrary
     ) -> String {
-        // Extract cycle details
-        let cycleName = cycle.name
-        let cycleStages = cycle.stages
+        // Convert legacy cycle to unified Treatment model
+        let treatment = Treatment(from: cycle)
+        
+        // Use new method
+        return buildAdvancedTreatmentPrompt(
+            treatment: treatment,
+            profile: profile,
+            simulationData: simulationData,
+            compoundLibrary: compoundLibrary
+        )
+    }
+    
+    /// Build the prompt for protocol insights (legacy method)
+    @available(*, deprecated, message: "Use buildTreatmentPrompt instead")
+    private func buildProtocolPrompt(
+        treatmentProtocol: InjectionProtocol,
+        profile: UserProfile,
+        simulationData: [DataPoint],
+        compoundLibrary: CompoundLibrary
+    ) -> String {
+        // Convert legacy protocol to unified Treatment model
+        let treatment = Treatment(from: treatmentProtocol)
+        
+        // Use new method
+        return buildTreatmentPrompt(
+            treatment: treatment,
+            profile: profile,
+            simulationData: simulationData,
+            compoundLibrary: compoundLibrary
+        )
+    }
+    
+    /// Build the prompt for advanced treatment insights
+    private func buildAdvancedTreatmentPrompt(
+        treatment: Treatment,
+        profile: UserProfile,
+        simulationData: [DataPoint],
+        compoundLibrary: CompoundLibrary
+    ) -> String {
+        // Ensure this is an advanced treatment
+        guard treatment.treatmentType == .advanced,
+              let totalWeeks = treatment.totalWeeks,
+              let stages = treatment.stages else {
+            return "Error: Invalid advanced treatment data"
+        }
+        // Extract treatment details
+        let treatmentName = treatment.name
+        let treatmentStages = stages
         
         // Build stages information
         var stagesInfo = ""
-        for (index, stage) in cycleStages.enumerated() {
+        for (index, stage) in treatmentStages.enumerated() {
             stagesInfo += """
             
             Stage \(index + 1):
@@ -327,7 +475,7 @@ class OpenAIService: ObservableObject {
         // Build the prompt
         return """
         You are a specialized AI assistant for TestoSim, a hormone therapy simulation app. 
-        Analyze the following cycle and simulation data, and provide insights in the specified JSON format.
+        Analyze the following advanced treatment and simulation data, and provide insights in the specified JSON format.
         
         USER PROFILE:
         Weight: \(profile.weight ?? 0) kg
@@ -335,9 +483,9 @@ class OpenAIService: ObservableObject {
         Age: \(profile.age ?? 0)
         Biological sex: \(profile.biologicalSex.rawValue)
         
-        CYCLE DETAILS:
-        Name: \(cycleName)
-        Total Duration: \(cycle.totalWeeks) weeks
+        ADVANCED TREATMENT DETAILS:
+        Name: \(treatmentName)
+        Total Duration: \(totalWeeks) weeks
         \(stagesInfo)
         
         SIMULATION STATISTICS:
@@ -349,8 +497,8 @@ class OpenAIService: ObservableObject {
         Based on this information, provide insights about the cycle in the following JSON format:
         
         {
-            "title": "Insights for [Cycle Name]",
-            "summary": "A concise summary of the cycle analysis.",
+            "title": "Insights for [Treatment Name]",
+            "summary": "A concise summary of the advanced treatment analysis.",
             "stageBreakdown": [
                 {
                     "stageNumber": 1,
@@ -370,7 +518,7 @@ class OpenAIService: ObservableObject {
         1. Stage progression and rationale
         2. Compound selection and synergies
         3. Level fluctuations and their implications
-        4. Potential optimizations to the cycle
+        4. Potential optimizations to the treatment
         5. Educational content about the compounds and how they work together
         """
     }
@@ -476,7 +624,7 @@ class OpenAIService: ObservableObject {
     }
     
     /// Parse insights from the OpenAI API response
-    private func parseInsightsFromResponse(_ jsonString: String, forProtocol protocol: InjectionProtocol? = nil, forCycle cycle: Cycle? = nil) throws -> Insights {
+    private func parseInsightsFromResponse(_ jsonString: String, forTreatment treatment: Treatment? = nil, forProtocol protocol: InjectionProtocol? = nil, forCycle cycle: Cycle? = nil) throws -> Insights {
         let decoder = JSONDecoder()
         
         // Extract the JSON structure from the response

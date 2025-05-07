@@ -5,25 +5,28 @@ struct ProtocolListView: View {
     
     var body: some View {
         List {
-            if dataStore.profile.protocols.isEmpty {
-                Text("No protocols yet. Tap + to add one.")
+            if dataStore.treatments.filter({ $0.treatmentType == .simple }).isEmpty {
+                Text("No treatments yet. Tap + to add one.")
                     .foregroundColor(.secondary)
             } else {
-                ForEach(dataStore.profile.protocols) { injectionProtocol in
-                    NavigationLink(destination: ProtocolDetailView(injectionProtocol: injectionProtocol)) {
-                        protocolRowContent(for: injectionProtocol)
+                ForEach(dataStore.treatments.filter { $0.treatmentType == .simple }) { treatment in
+                    NavigationLink(destination: ProtocolDetailView(injectionProtocol: treatment.toLegacyProtocol() ?? InjectionProtocol(id: treatment.id, name: treatment.name, doseMg: treatment.doseMg ?? 0, frequencyDays: treatment.frequencyDays ?? 0, startDate: treatment.startDate))) {
+                        treatmentRowContent(for: treatment)
                     }
                 }
                 .onDelete(perform: deleteItems)
             }
         }
-        .navigationTitle("Protocols")
+        .navigationTitle("Treatments")
         .toolbar {
             toolbarContent
         }
-        .sheet(isPresented: $dataStore.isPresentingProtocolForm) {
-            ProtocolFormView(protocolToEdit: dataStore.protocolToEdit)
-                .environmentObject(dataStore)
+        .sheet(isPresented: $dataStore.isPresentingTreatmentForm) {
+            TreatmentFormView(
+                viewModel: dataStore.treatmentFormAdapter.viewModel,
+                compoundLibrary: dataStore.compoundLibrary,
+                treatment: dataStore.treatmentToEdit
+            )
         }
     }
     
@@ -37,39 +40,39 @@ struct ProtocolListView: View {
             }
             ToolbarItem(placement: .primaryAction) {
                 Button {
-                    dataStore.protocolToEdit = nil
-                    dataStore.isPresentingProtocolForm = true
+                    dataStore.treatmentToEdit = nil
+                    dataStore.isPresentingTreatmentForm = true
                 } label: {
-                    Label("Add Protocol", systemImage: "plus")
+                    Label("Add Treatment", systemImage: "plus")
                 }
             }
         }
     }
     
-    // Extracted protocol row content
-    private func protocolRowContent(for injectionProtocol: InjectionProtocol) -> some View {
+    // Extracted treatment row content
+    private func treatmentRowContent(for treatment: Treatment) -> some View {
         VStack(alignment: .leading) {
-            Text(injectionProtocol.name)
+            Text(treatment.name)
                 .font(.headline)
             
-            // Summary text based on protocol type
+            // Summary text based on content type
             Group {
-                switch injectionProtocol.protocolType {
-                case .compound:
-                    if let compoundID = injectionProtocol.compoundID,
-                       let compound = dataStore.compoundLibrary.compound(withID: compoundID) {
-                        Text("\(injectionProtocol.doseMg, format: .number.precision(.fractionLength(0))) mg \(compound.fullDisplayName) every \(injectionProtocol.frequencyDays, format: .number.precision(.fractionLength(1))) days")
-                    } else {
-                        Text("\(injectionProtocol.doseMg, format: .number.precision(.fractionLength(0))) mg every \(injectionProtocol.frequencyDays, format: .number.precision(.fractionLength(1))) days")
-                    }
-                    
-                case .blend:
-                    if let blendID = injectionProtocol.blendID,
-                       let blend = dataStore.compoundLibrary.blend(withID: blendID) {
-                        Text("\(injectionProtocol.doseMg, format: .number.precision(.fractionLength(0))) mg \(blend.name) every \(injectionProtocol.frequencyDays, format: .number.precision(.fractionLength(1))) days")
-                    } else {
-                        Text("\(injectionProtocol.doseMg, format: .number.precision(.fractionLength(0))) mg every \(injectionProtocol.frequencyDays, format: .number.precision(.fractionLength(1))) days")
-                    }
+                if let compoundID = treatment.compoundID,
+                   let compound = dataStore.compoundLibrary.compound(withID: compoundID),
+                   let doseMg = treatment.doseMg,
+                   let frequencyDays = treatment.frequencyDays {
+                    // Compound-based treatment
+                    Text("\(doseMg, format: .number.precision(.fractionLength(0))) mg \(compound.fullDisplayName) every \(frequencyDays, format: .number.precision(.fractionLength(1))) days")
+                } else if let blendID = treatment.blendID,
+                          let blend = dataStore.compoundLibrary.blend(withID: blendID),
+                          let doseMg = treatment.doseMg,
+                          let frequencyDays = treatment.frequencyDays {
+                    // Blend-based treatment
+                    Text("\(doseMg, format: .number.precision(.fractionLength(0))) mg \(blend.name) every \(frequencyDays, format: .number.precision(.fractionLength(1))) days")
+                } else if let doseMg = treatment.doseMg,
+                          let frequencyDays = treatment.frequencyDays {
+                    // Generic case
+                    Text("\(doseMg, format: .number.precision(.fractionLength(0))) mg every \(frequencyDays, format: .number.precision(.fractionLength(1))) days")
                 }
             }
             .font(.subheadline)
@@ -78,7 +81,14 @@ struct ProtocolListView: View {
     }
     
     private func deleteItems(at offsets: IndexSet) {
-        dataStore.removeProtocol(at: offsets)
+        // Get the treatments that are being deleted
+        let simpleTreatments = dataStore.treatments.filter { $0.treatmentType == .simple }
+        let idsToDelete = offsets.map { simpleTreatments[$0].id }
+        
+        // Delete each treatment
+        for id in idsToDelete {
+            dataStore.deleteTreatment(with: id)
+        }
     }
 }
 
