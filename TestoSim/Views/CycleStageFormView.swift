@@ -1,11 +1,13 @@
 import SwiftUI
 
+/// Form view for creating or editing a cycle stage
+/// Converted to use the unified treatment model
 struct CycleStageFormView: View {
     @EnvironmentObject var dataStore: AppDataStore
     @Binding var isPresented: Bool
     
-    var cycle: Cycle
-    var stageToEdit: CycleStage?
+    var treatment: Treatment
+    var stageToEdit: TreatmentStage?
     
     @State private var stageName: String = ""
     @State private var startWeek: Int = 0
@@ -14,8 +16,8 @@ struct CycleStageFormView: View {
     @State private var isPresentingBlendPicker = false
     
     // Stage items
-    @State private var compounds: [CompoundStageItem] = []
-    @State private var blends: [BlendStageItem] = []
+    @State private var compounds: [Treatment.StageCompound] = []
+    @State private var blends: [Treatment.StageBlend] = []
     
     // Temporary item being configured
     @State private var tempCompound: Compound?
@@ -40,14 +42,14 @@ struct CycleStageFormView: View {
                         Text("Start Week")
                         Spacer()
                         Picker("Start Week", selection: $startWeek) {
-                            ForEach(Array(0..<cycle.totalWeeks), id: \.self) { week in
+                            ForEach(Array(0..<(treatment.totalWeeks ?? 0)), id: \.self) { week in
                                 Text("Week \(week + 1)").tag(week)
                             }
                         }
                         .pickerStyle(MenuPickerStyle())
                     }
                     
-                    Stepper("Duration: \(durationWeeks) weeks", value: $durationWeeks, in: 1...max(1, cycle.totalWeeks - startWeek))
+                    Stepper("Duration: \(durationWeeks) weeks", value: $durationWeeks, in: 1...max(1, (treatment.totalWeeks ?? 0) - startWeek))
                 }
                 
                 Section(header: stageItemsHeader) {
@@ -174,58 +176,69 @@ struct CycleStageFormView: View {
             stageName = stage.name
             startWeek = stage.startWeek
             durationWeeks = stage.durationWeeks
-            compounds = stage.compounds.map { $0.toStageCompound() }
-            blends = stage.blends.map { $0.toStageBlend() }
+            compounds = stage.compounds
+            blends = stage.blends
         } else {
             // Find the first available week after any existing stages
-            if !cycle.stages.isEmpty {
-                let lastStage = cycle.stages.max(by: { $0.startWeek + $0.durationWeeks < $1.startWeek + $1.durationWeeks })
+            if let stages = treatment.stages, !stages.isEmpty {
+                let lastStage = stages.max(by: { $0.startWeek + $0.durationWeeks < $1.startWeek + $1.durationWeeks })
                 if let lastStage = lastStage {
-                    startWeek = min(lastStage.startWeek + lastStage.durationWeeks, cycle.totalWeeks - 1)
+                    startWeek = min(lastStage.startWeek + lastStage.durationWeeks, (treatment.totalWeeks ?? 0) - 1)
                 }
             }
             
             // Default stage name if creating new
-            stageName = "Stage \(cycle.stages.count + 1)"
+            if let stages = treatment.stages {
+                stageName = "Stage \(stages.count + 1)"
+            } else {
+                stageName = "Stage 1"
+            }
         }
     }
     
     private func saveStage() {
         // Create a new stage or update existing
-        var updatedStage: CycleStage
+        var updatedStage: TreatmentStage
+        
         if let existingStage = stageToEdit {
             // Update existing stage
             updatedStage = existingStage
             updatedStage.name = stageName
             updatedStage.startWeek = startWeek
             updatedStage.durationWeeks = durationWeeks
-            updatedStage.compounds = compounds.map { CycleCompoundItem(from: $0) }
-            updatedStage.blends = blends.map { CycleBlendItem(from: $0) }
+            updatedStage.compounds = compounds
+            updatedStage.blends = blends
             
-            // Find and replace in cycle
-            var updatedCycle = cycle
-            if let index = updatedCycle.stages.firstIndex(where: { $0.id == existingStage.id }) {
-                updatedCycle.stages[index] = updatedStage
+            // Find and replace in treatment
+            var updatedTreatment = treatment
+            if var stages = updatedTreatment.stages, let index = stages.firstIndex(where: { $0.id == existingStage.id }) {
+                stages[index] = updatedStage
+                updatedTreatment.stages = stages
             }
             
-            // Save cycle
-            dataStore.saveCycle(updatedCycle)
+            // Save treatment
+            dataStore.saveTreatment(updatedTreatment)
         } else {
             // Create new stage
-            updatedStage = CycleStage(
+            updatedStage = TreatmentStage(
                 name: stageName,
                 startWeek: startWeek,
                 durationWeeks: durationWeeks,
-                compounds: compounds.map { CycleCompoundItem(from: $0) },
-                blends: blends.map { CycleBlendItem(from: $0) }
+                compounds: compounds,
+                blends: blends
             )
             
-            // Add to cycle
-            var updatedCycle = cycle
-            updatedCycle.stages.append(updatedStage)
+            // Add to treatment
+            var updatedTreatment = treatment
+            if var stages = updatedTreatment.stages {
+                stages.append(updatedStage)
+                updatedTreatment.stages = stages
+            } else {
+                updatedTreatment.stages = [updatedStage]
+            }
             
-            // Save cycle
-            dataStore.saveCycle(updatedCycle)
+            // Save treatment
+            dataStore.saveTreatment(updatedTreatment)
         }
     }
     
@@ -273,7 +286,7 @@ struct CycleStageFormView: View {
     private func addCompoundItem() {
         guard let compound = tempCompound else { return }
         
-        let newItem = CompoundStageItem(
+        let newItem = Treatment.StageCompound(
             compoundID: compound.id,
             compoundName: compound.fullDisplayName,
             doseMg: tempDoseMg,
@@ -287,7 +300,7 @@ struct CycleStageFormView: View {
     private func addBlendItem() {
         guard let blend = tempBlend else { return }
         
-        let newItem = BlendStageItem(
+        let newItem = Treatment.StageBlend(
             blendID: blend.id,
             blendName: blend.name,
             doseMg: tempDoseMg,
@@ -298,195 +311,3 @@ struct CycleStageFormView: View {
         blends.append(newItem)
     }
 }
-
-struct CompoundItemRow: View {
-    let item: CompoundStageItem
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(item.compoundName)
-                .font(.headline)
-            
-            HStack {
-                Text("\(item.doseMg.isFinite ? Int(item.doseMg) : 0)mg")
-                Spacer()
-                Text("Every \(formatFrequency(item.frequencyDays))")
-            }
-            .font(.subheadline)
-            .foregroundColor(.secondary)
-            
-            Text("Route: \(item.administrationRoute)")
-                .font(.caption)
-                .foregroundColor(.secondary)
-        }
-        .padding(.vertical, 4)
-    }
-    
-    private func formatFrequency(_ days: Double) -> String {
-        if days == 1 {
-            return "day"
-        } else if days == 7 {
-            return "week"
-        } else if days == 3.5 {
-            return "3.5 days"
-        } else {
-            return "\(days) days"
-        }
-    }
-}
-
-struct BlendItemRow: View {
-    let item: BlendStageItem
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(item.blendName)
-                .font(.headline)
-            
-            HStack {
-                Text("\(item.doseMg.isFinite ? Int(item.doseMg) : 0)mg")
-                Spacer()
-                Text("Every \(formatFrequency(item.frequencyDays))")
-            }
-            .font(.subheadline)
-            .foregroundColor(.secondary)
-            
-            Text("Route: \(item.administrationRoute)")
-                .font(.caption)
-                .foregroundColor(.secondary)
-        }
-        .padding(.vertical, 4)
-    }
-    
-    private func formatFrequency(_ days: Double) -> String {
-        if days == 1 {
-            return "day"
-        } else if days == 7 {
-            return "week"
-        } else if days == 3.5 {
-            return "3.5 days"
-        } else {
-            return "\(days) days"
-        }
-    }
-}
-
-struct ItemConfigurationView: View {
-    let title: String
-    @Binding var doseMg: Double
-    @Binding var frequencyDays: Double
-    @Binding var route: Compound.Route
-    let onSave: () -> Void
-    let onCancel: () -> Void
-    
-    var body: some View {
-        NavigationView {
-            Form {
-                Section(header: Text("Dosage")) {
-                    Stepper(value: $doseMg, in: 10...500, step: 10) {
-                        Text("Dose: \(doseMg.isFinite ? Int(doseMg) : 0)mg")
-                    }
-                }
-                
-                Section(header: Text("Frequency")) {
-                    Picker("Frequency", selection: $frequencyDays) {
-                        Text("Daily").tag(1.0)
-                        Text("Every other day").tag(2.0)
-                        Text("Twice weekly").tag(3.5)
-                        Text("Weekly").tag(7.0)
-                        Text("Every 2 weeks").tag(14.0)
-                    }
-                    .pickerStyle(InlinePickerStyle())
-                }
-                
-                Section(header: Text("Route")) {
-                    Picker("Administration Route", selection: $route) {
-                        Text("Intramuscular").tag(Compound.Route.intramuscular)
-                        Text("Subcutaneous").tag(Compound.Route.subcutaneous)
-                        Text("Oral").tag(Compound.Route.oral)
-                        Text("Transdermal").tag(Compound.Route.transdermal)
-                    }
-                    .pickerStyle(InlinePickerStyle())
-                }
-            }
-            .navigationTitle(title)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel", action: onCancel)
-                }
-                
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Save", action: onSave)
-                }
-            }
-        }
-    }
-}
-
-// Compound Picker View (simplified version)
-struct CompoundPickerView: View {
-    @EnvironmentObject var dataStore: AppDataStore
-    @Binding var selectedCompound: Compound?
-    let onCompoundSelected: (Compound) -> Void
-    
-    var body: some View {
-        NavigationView {
-            List {
-                ForEach(dataStore.compoundLibrary.compounds) { compound in
-                    Button(action: {
-                        selectedCompound = compound
-                        onCompoundSelected(compound)
-                    }) {
-                        HStack {
-                            Text(compound.fullDisplayName)
-                            Spacer()
-                            if selectedCompound?.id == compound.id {
-                                Image(systemName: "checkmark")
-                                    .foregroundColor(.accentColor)
-                            }
-                        }
-                    }
-                    .buttonStyle(PlainButtonStyle())
-                }
-            }
-            .navigationTitle("Select Compound")
-        }
-    }
-}
-
-// Blend Picker View (simplified version)
-struct BlendPickerView: View {
-    @EnvironmentObject var dataStore: AppDataStore
-    @Binding var selectedBlend: VialBlend?
-    let onBlendSelected: (VialBlend) -> Void
-    
-    var body: some View {
-        NavigationView {
-            List {
-                ForEach(dataStore.compoundLibrary.blends) { blend in
-                    Button(action: {
-                        selectedBlend = blend
-                        onBlendSelected(blend)
-                    }) {
-                        HStack {
-                            VStack(alignment: .leading) {
-                                Text(blend.name)
-                                    .font(.headline)
-                                Text(blend.compositionDescription(using: dataStore.compoundLibrary))
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
-                            Spacer()
-                            if selectedBlend?.id == blend.id {
-                                Image(systemName: "checkmark")
-                                    .foregroundColor(.accentColor)
-                            }
-                        }
-                    }
-                    .buttonStyle(PlainButtonStyle())
-                }
-            }
-            .navigationTitle("Select Blend")
-        }
-    }
-} 

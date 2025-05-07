@@ -3,7 +3,7 @@ import CoreData
 
 /// Represents a unified treatment model that combines protocol and cycle concepts
 /// with support for both simple and advanced treatments
-struct Treatment: Identifiable, Codable {
+struct Treatment: Identifiable, Codable, Equatable {
     // MARK: - Core Properties
     var id: UUID = UUID()
     var name: String
@@ -246,13 +246,43 @@ struct Treatment: Identifiable, Codable {
         
         return cycle
     }
+    
+    // MARK: - Equatable Implementation
+    
+    static func == (lhs: Treatment, rhs: Treatment) -> Bool {
+        return lhs.id == rhs.id &&
+               lhs.name == rhs.name &&
+               lhs.startDate == rhs.startDate &&
+               lhs.notes == rhs.notes &&
+               lhs.treatmentType == rhs.treatmentType &&
+               lhs.doseMg == rhs.doseMg &&
+               lhs.frequencyDays == rhs.frequencyDays &&
+               lhs.compoundID == rhs.compoundID &&
+               lhs.blendID == rhs.blendID &&
+               lhs.selectedRoute == rhs.selectedRoute &&
+               lhs.totalWeeks == rhs.totalWeeks &&
+               compareOptionalArrays(lhs.stages, rhs.stages) &&
+               compareOptionalArrays(lhs.bloodSamples, rhs.bloodSamples)
+    }
+    
+    // Helper function to compare optional arrays
+    private static func compareOptionalArrays<T: Equatable>(_ lhs: [T]?, _ rhs: [T]?) -> Bool {
+        switch (lhs, rhs) {
+        case (.none, .none):
+            return true
+        case (.some(let lhsArray), .some(let rhsArray)):
+            return lhsArray == rhsArray
+        default:
+            return false
+        }
+    }
 }
 
 // MARK: - Treatment Stage
 
 /// Represents a stage within the Treatment model
 extension Treatment {
-    struct Stage: Identifiable, Codable {
+    struct Stage: Identifiable, Codable, Equatable {
         var id: UUID = UUID()
         var name: String
         var startWeek: Int  // Week number in the treatment (0-based)
@@ -290,6 +320,17 @@ extension Treatment {
             }
             
             return stage
+        }
+        
+        // MARK: - Equatable Implementation
+        
+        static func == (lhs: Treatment.Stage, rhs: Treatment.Stage) -> Bool {
+            return lhs.id == rhs.id &&
+                   lhs.name == rhs.name &&
+                   lhs.startWeek == rhs.startWeek &&
+                   lhs.durationWeeks == rhs.durationWeeks &&
+                   lhs.compounds == rhs.compounds &&
+                   lhs.blends == rhs.blends
         }
     }
 }

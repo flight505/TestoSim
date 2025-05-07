@@ -99,10 +99,7 @@ iOSInjectionProject/
 .cursor/
 
 # App specific
-memory.jsonl
 .repomix/
-ai_docs/
-specs/
 
 # API Keys
 TestoSim/Config.xcconfig

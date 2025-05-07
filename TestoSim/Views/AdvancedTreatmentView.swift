@@ -1,6 +1,6 @@
 import SwiftUI
 
-struct AdvancedTreatmentView_Impl: View {
+struct AdvancedTreatmentView: View {
     @EnvironmentObject var dataStore: AppDataStore
     @State private var isAddingTreatment = false
     @State private var selectedTreatment: Treatment?
@@ -47,7 +47,7 @@ struct AdvancedTreatmentView_Impl: View {
                     // Detail view
                     ScrollView {
                         if let selectedTreatment = selectedTreatment {
-                            TreatmentDetailPanel_Impl(
+                            TreatmentDetailPanel(
                                 treatment: selectedTreatment,
                                 onAddStage: {
                                     stageToEdit = nil
@@ -79,7 +79,7 @@ struct AdvancedTreatmentView_Impl: View {
         }
         .navigationTitle("Advanced Treatments")
         .sheet(isPresented: $isAddingTreatment) {
-            AdvancedTreatmentFormView_Impl(isPresented: $isAddingTreatment)
+            AdvancedTreatmentFormView(isPresented: $isAddingTreatment)
                 .environmentObject(dataStore)
         }
         .sheet(isPresented: $isPresentingStageForm) {
@@ -207,7 +207,7 @@ struct AdvancedTreatmentView_Impl: View {
     }
 }
 
-struct TreatmentDetailPanel_Impl: View {
+struct TreatmentDetailPanel: View {
     @EnvironmentObject var dataStore: AppDataStore
     let treatment: Treatment
     let onAddStage: () -> Void
@@ -470,7 +470,7 @@ struct TreatmentDetailPanel_Impl: View {
 // TreatmentStageFormView is imported from separate file
 
 // Simple form for creating advanced treatments
-struct AdvancedTreatmentFormView_Impl: View {
+struct AdvancedTreatmentFormView: View {
     @EnvironmentObject var dataStore: AppDataStore
     @Binding var isPresented: Bool
     
@@ -539,7 +539,7 @@ struct AdvancedTreatmentFormView_Impl: View {
 // Component views are imported from TreatmentComponentViews.swift
 
 // Preview removed to avoid ambiguity
-/*
+/* 
 #Preview {
     NavigationView {
         AdvancedTreatmentView()

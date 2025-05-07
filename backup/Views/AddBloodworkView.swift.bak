@@ -1,10 +1,10 @@
 import SwiftUI
 
-struct AddBloodworkView_Updated: View {
+struct AddBloodworkView: View {
     @EnvironmentObject var dataStore: AppDataStore
     @Environment(\.dismiss) var dismiss
     
-    var treatment: Treatment
+    var injectionProtocol: InjectionProtocol
     
     @State private var bloodValue: String = ""
     @State private var bloodDate: Date = Date()
@@ -77,22 +77,16 @@ struct AddBloodworkView_Updated: View {
             unit: dataStore.profile.unit
         )
         
-        // Add to the treatment
-        var updatedTreatment = treatment
-        
-        if var bloodSamples = updatedTreatment.bloodSamples {
-            bloodSamples.append(newSample)
-            updatedTreatment.bloodSamples = bloodSamples
-        } else {
-            updatedTreatment.bloodSamples = [newSample]
-        }
+        // Add to the protocol
+        var updatedProtocol = injectionProtocol
+        updatedProtocol.bloodSamples.append(newSample)
         
         // Save back to the data store
-        dataStore.updateTreatment(updatedTreatment)
+        dataStore.updateProtocol(updatedProtocol)
         
         // If requested, perform calibration
         if andCalibrate {
-            dataStore.calibrateTreatment(updatedTreatment)
+            dataStore.calibrateProtocol(updatedProtocol)
         }
         
         dismiss()
@@ -100,11 +94,11 @@ struct AddBloodworkView_Updated: View {
 }
 
 #Preview {
-    AddBloodworkView_Updated(treatment: Treatment(
-        name: "Test Treatment",
-        startDate: Date().addingTimeInterval(-30 * 24 * 3600), // 30 days ago
-        notes: nil,
-        treatmentType: .simple
+    AddBloodworkView(injectionProtocol: InjectionProtocol(
+        name: "Test Protocol",
+        doseMg: 100,
+        frequencyDays: 7,
+        startDate: Date().addingTimeInterval(-30 * 24 * 3600) // 30 days ago
     ))
     .environmentObject(AppDataStore())
-}
+} 

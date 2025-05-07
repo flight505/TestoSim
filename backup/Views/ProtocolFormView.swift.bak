@@ -1,10 +1,10 @@
 import SwiftUI
 
-struct TreatmentFormView_Updated: View {
+struct ProtocolFormView: View {
     @EnvironmentObject var dataStore: AppDataStore
     @Environment(\.dismiss) var dismiss
     
-    var treatmentToEdit: Treatment?
+    var protocolToEdit: InjectionProtocol?
     
     // MARK: - State variables
     @State private var name: String = ""
@@ -13,8 +13,8 @@ struct TreatmentFormView_Updated: View {
     @State private var startDate: Date = Date()
     @State private var notes: String = ""
     
-    // Treatment type and selection variables
-    @State private var contentType: Treatment.ContentType = .compound
+    // Protocol type and selection variables
+    @State private var protocolType: ProtocolType = .compound
     @State private var selectedCompoundID: UUID?
     @State private var selectedBlendID: UUID?
     @State private var selectedRoute: Compound.Route = .intramuscular
@@ -24,7 +24,7 @@ struct TreatmentFormView_Updated: View {
     @State private var showingBlendPicker = false
     
     var isEditing: Bool {
-        treatmentToEdit != nil
+        protocolToEdit != nil
     }
     
     var selectedCompoundName: String {
@@ -46,27 +46,27 @@ struct TreatmentFormView_Updated: View {
     var body: some View {
         NavigationView {
             Form {
-                Section(header: Text("Treatment Details")) {
+                Section(header: Text("Protocol Details")) {
                     TextField("Name", text: $name)
                     
-                    // Treatment Type Selector
-                    Picker("Type", selection: $contentType) {
-                        Text("Compound").tag(Treatment.ContentType.compound)
-                        Text("Blend").tag(Treatment.ContentType.blend)
+                    // Protocol Type Selector
+                    Picker("Type", selection: $protocolType) {
+                        Text("Compound").tag(ProtocolType.compound)
+                        Text("Blend").tag(ProtocolType.blend)
                     }
                     .pickerStyle(SegmentedPickerStyle())
-                    .onChange(of: contentType) { oldValue, newValue in
+                    .onChange(of: protocolType) { oldValue, newValue in
                         // Reset selection when changing type
-                        if contentType != .compound {
+                        if protocolType != .compound {
                             selectedCompoundID = nil
                         }
-                        if contentType != .blend {
+                        if protocolType != .blend {
                             selectedBlendID = nil
                         }
                     }
                     
-                    // Dynamically show the appropriate selection UI based on treatment type
-                    switch contentType {
+                    // Dynamically show the appropriate selection UI based on protocol type
+                    switch protocolType {
                     case .compound:
                         Button(action: {
                             showingCompoundPicker = true
@@ -153,7 +153,7 @@ struct TreatmentFormView_Updated: View {
                         .frame(height: 100)
                 }
             }
-            .navigationTitle(isEditing ? "Edit Treatment" : "New Treatment")
+            .navigationTitle(isEditing ? "Edit Protocol" : "New Protocol")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {
@@ -163,39 +163,33 @@ struct TreatmentFormView_Updated: View {
                 
                 ToolbarItem(placement: .confirmationAction) {
                     Button(isEditing ? "Update" : "Add") {
-                        saveTreatment()
+                        saveProtocol()
                     }
                     .disabled(!isValid)
                 }
             }
             .onAppear {
-                if let treatmentToEdit = treatmentToEdit, treatmentToEdit.treatmentType == .simple {
-                    // Fill form with existing treatment data
-                    name = treatmentToEdit.name
+                if let protocolToEdit = protocolToEdit {
+                    // Fill form with existing protocol data
+                    name = protocolToEdit.name
                     
-                    // Determine which content type we're editing
-                    contentType = treatmentToEdit.contentType ?? .compound
-                    selectedCompoundID = treatmentToEdit.compoundID
-                    selectedBlendID = treatmentToEdit.blendID
+                    // Determine which protocol type we're editing
+                    protocolType = protocolToEdit.protocolType
+                    selectedCompoundID = protocolToEdit.compoundID
+                    selectedBlendID = protocolToEdit.blendID
                     
                     // Set route if available
-                    if let routeString = treatmentToEdit.selectedRoute,
+                    if let routeString = protocolToEdit.selectedRoute,
                        let route = Compound.Route(rawValue: routeString) {
                         selectedRoute = route
                     } else {
                         selectedRoute = .intramuscular // Default
                     }
                     
-                    if let dose = treatmentToEdit.doseMg {
-                        doseMg = String(format: "%.1f", dose)
-                    }
-                    
-                    if let frequency = treatmentToEdit.frequencyDays {
-                        frequencyDays = String(format: "%.1f", frequency)
-                    }
-                    
-                    startDate = treatmentToEdit.startDate
-                    notes = treatmentToEdit.notes ?? ""
+                    doseMg = String(format: "%.1f", protocolToEdit.doseMg)
+                    frequencyDays = String(format: "%.1f", protocolToEdit.frequencyDays)
+                    startDate = protocolToEdit.startDate
+                    notes = protocolToEdit.notes ?? ""
                 }
             }
             .sheet(isPresented: $showingCompoundPicker) {
@@ -216,7 +210,7 @@ struct TreatmentFormView_Updated: View {
         }
         
         // Type-specific validation
-        switch contentType {
+        switch protocolType {
         case .compound:
             return selectedCompoundID != nil
         case .blend:
@@ -224,59 +218,55 @@ struct TreatmentFormView_Updated: View {
         }
     }
     
-    private func saveTreatment() {
+    private func saveProtocol() {
         guard let doseValue = Double(doseMg),
               let frequencyValue = Double(frequencyDays) else {
             return
         }
         
-        if isEditing, var updatedTreatment = treatmentToEdit {
-            // Update fields
-            updatedTreatment.name = name
-            updatedTreatment.doseMg = doseValue
-            updatedTreatment.frequencyDays = frequencyValue
-            updatedTreatment.startDate = startDate
-            updatedTreatment.notes = notes.isEmpty ? nil : notes
+        if isEditing, let protocolToEdit = protocolToEdit {
+            var updatedProtocol = protocolToEdit
+            updatedProtocol.name = name
+            updatedProtocol.doseMg = doseValue
+            updatedProtocol.frequencyDays = frequencyValue
+            updatedProtocol.startDate = startDate
+            updatedProtocol.notes = notes.isEmpty ? nil : notes
             
-            // Update the content type-specific properties
-            switch contentType {
+            // Update the protocol type-specific properties
+            switch protocolType {
             case .compound:
-                updatedTreatment.compoundID = selectedCompoundID
-                updatedTreatment.blendID = nil
-                updatedTreatment.selectedRoute = selectedRoute.rawValue
+                updatedProtocol.compoundID = selectedCompoundID
+                updatedProtocol.blendID = nil
+                updatedProtocol.selectedRoute = selectedRoute.rawValue
                 
             case .blend:
-                updatedTreatment.compoundID = nil
-                updatedTreatment.blendID = selectedBlendID
-                updatedTreatment.selectedRoute = selectedRoute.rawValue
+                updatedProtocol.compoundID = nil
+                updatedProtocol.blendID = selectedBlendID
+                updatedProtocol.selectedRoute = selectedRoute.rawValue
             }
             
-            dataStore.updateTreatment(updatedTreatment)
+            dataStore.updateProtocol(updatedProtocol)
         } else {
-            // Create a new treatment
-            var newTreatment = Treatment(
+            var newProtocol = InjectionProtocol(
                 name: name,
+                doseMg: doseValue,
+                frequencyDays: frequencyValue,
                 startDate: startDate,
-                notes: notes.isEmpty ? nil : notes,
-                treatmentType: .simple
+                notes: notes.isEmpty ? nil : notes
             )
             
-            // Set the simple treatment properties
-            newTreatment.doseMg = doseValue
-            newTreatment.frequencyDays = frequencyValue
-            
-            // Set the content type-specific properties
-            switch contentType {
+            // Set the protocol type-specific properties
+            switch protocolType {
             case .compound:
-                newTreatment.compoundID = selectedCompoundID
-                newTreatment.selectedRoute = selectedRoute.rawValue
+                newProtocol.compoundID = selectedCompoundID
+                newProtocol.selectedRoute = selectedRoute.rawValue
                 
             case .blend:
-                newTreatment.blendID = selectedBlendID
-                newTreatment.selectedRoute = selectedRoute.rawValue
+                newProtocol.blendID = selectedBlendID
+                newProtocol.selectedRoute = selectedRoute.rawValue
             }
             
-            dataStore.addTreatment(newTreatment)
+            dataStore.addProtocol(newProtocol)
         }
         
         dismiss()
@@ -284,6 +274,6 @@ struct TreatmentFormView_Updated: View {
 }
 
 #Preview {
-    TreatmentFormView_Updated()
+    ProtocolFormView()
         .environmentObject(AppDataStore())
-}
+} 

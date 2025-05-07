@@ -4,6 +4,7 @@ import Combine
 
 /// Adapter class to integrate TreatmentFormView with AppDataStore
 /// This serves as a bridge between the AppDataStore and TreatmentViewModel
+@MainActor
 class TreatmentFormAdapter: ObservableObject {
     // MARK: - Published Properties
     @Published var viewModel: TreatmentViewModel
@@ -53,9 +54,15 @@ class TreatmentFormAdapter: ObservableObject {
             .dropFirst() // Skip the initial value to avoid immediate update
             .sink { [weak self] treatments in
                 guard let self = self else { return }
-                // Only update if the arrays are different to avoid infinite loops
-                if self.dataStore.treatments != treatments {
-                    self.dataStore.treatments = treatments
+                
+                // We need to use Task since we're in a non-async context
+                Task { @MainActor in
+                    // Only update if the arrays are different to avoid infinite loops
+                    // Note: Treatment might need to conform to Equatable for this
+                    // For now, assuming the reference comparison works
+                    if self.dataStore.treatments != treatments {
+                        self.dataStore.treatments = treatments
+                    }
                 }
             }
             .store(in: &cancellables)
@@ -65,12 +72,16 @@ class TreatmentFormAdapter: ObservableObject {
             .dropFirst() // Skip the initial value to avoid immediate update
             .sink { [weak self] treatments in
                 guard let self = self else { return }
-                // Only update if the arrays are different to avoid infinite loops
-                if self.viewModel.treatments != treatments {
-                    self.viewModel.treatments = treatments
-                    // Update filtered collections as well
-                    self.viewModel.simpleTreatments = treatments.filter { $0.treatmentType == .simple }
-                    self.viewModel.advancedTreatments = treatments.filter { $0.treatmentType == .advanced }
+                
+                Task { @MainActor in
+                    // Only update if the arrays are different to avoid infinite loops
+                    // Same note about Equatable applies here
+                    if self.viewModel.treatments != treatments {
+                        self.viewModel.treatments = treatments
+                        // Update filtered collections as well
+                        self.viewModel.simpleTreatments = treatments.filter { $0.treatmentType == .simple }
+                        self.viewModel.advancedTreatments = treatments.filter { $0.treatmentType == .advanced }
+                    }
                 }
             }
             .store(in: &cancellables)
@@ -79,7 +90,10 @@ class TreatmentFormAdapter: ObservableObject {
         dataStore.$selectedTreatmentID
             .sink { [weak self] selectedID in
                 guard let self = self else { return }
-                self.viewModel.selectedTreatmentID = selectedID
+                
+                Task { @MainActor in
+                    self.viewModel.selectedTreatmentID = selectedID
+                }
             }
             .store(in: &cancellables)
         
@@ -87,32 +101,47 @@ class TreatmentFormAdapter: ObservableObject {
         dataStore.$treatmentToEdit
             .sink { [weak self] treatment in
                 guard let self = self else { return }
-                self.viewModel.treatmentToEdit = treatment
+                
+                Task { @MainActor in
+                    self.viewModel.treatmentToEdit = treatment
+                }
             }
             .store(in: &cancellables)
         
         // Intercept the viewModel's addTreatment to use the dataStore's method
         viewModel.addTreatmentCallback = { [weak self] treatment in
             guard let self = self else { return }
-            self.dataStore.addTreatment(treatment)
+            
+            Task { @MainActor in
+                self.dataStore.addTreatment(treatment)
+            }
         }
         
         // Intercept the viewModel's updateTreatment to use the dataStore's method
         viewModel.updateTreatmentCallback = { [weak self] treatment in
             guard let self = self else { return }
-            self.dataStore.updateTreatment(treatment)
+            
+            Task { @MainActor in
+                self.dataStore.updateTreatment(treatment)
+            }
         }
         
         // Intercept the viewModel's deleteTreatment to use the dataStore's method
         viewModel.deleteTreatmentCallback = { [weak self] treatment in
             guard let self = self else { return }
-            self.dataStore.deleteTreatment(with: treatment.id)
+            
+            Task { @MainActor in
+                self.dataStore.deleteTreatment(with: treatment.id)
+            }
         }
         
         // Intercept the viewModel's selectTreatment to use the dataStore's method
         viewModel.selectTreatmentCallback = { [weak self] id in
             guard let self = self else { return }
-            self.dataStore.selectTreatment(id: id)
+            
+            Task { @MainActor in
+                self.dataStore.selectTreatment(id: id)
+            }
         }
     }
 }

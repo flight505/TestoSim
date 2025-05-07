@@ -182,16 +182,59 @@ class CoreDataManager {
             cdProfile.biologicalSex = profile.biologicalSex.rawValue
             cdProfile.usesICloudSync = profile.usesICloudSync
             
-            // Convert legacy protocols to unified treatments and save
+            // Create CDInjectionProtocol entries
             for p in profile.protocols {
-                // Create a Treatment from the legacy protocol
-                let treatment = Treatment(from: p)
+                let cdProtocol = CDInjectionProtocol(context: context)
+                cdProtocol.id = p.id
+                cdProtocol.name = p.name
+                cdProtocol.doseMg = p.doseMg
+                cdProtocol.frequencyDays = p.frequencyDays
+                cdProtocol.startDate = p.startDate
+                cdProtocol.notes = p.notes
                 
-                // Save it to Core Data as a CDTreatment
-                let cdTreatment = treatment.saveToCD(context: context)
+                // TODO: The Core Data model needs to be updated to include these properties:
+                // - compoundID (UUID)
+                // - blendID (UUID)
+                // - selectedRoute (String)
+                // Once added, uncomment the following lines:
+                /*
+                cdProtocol.compoundID = p.compoundID
+                cdProtocol.blendID = p.blendID
+                cdProtocol.selectedRoute = p.selectedRoute
+                */
                 
-                // Associate with the user profile
-                cdProfile.addToTreatments(cdTreatment)
+                // For now, store this information in the notes field
+                var extendedInfo = ""
+                if let compoundID = p.compoundID {
+                    extendedInfo += "CompoundID: \(compoundID.uuidString)\n"
+                }
+                if let blendID = p.blendID {
+                    extendedInfo += "BlendID: \(blendID.uuidString)\n"
+                }
+                if let route = p.selectedRoute {
+                    extendedInfo += "Route: \(route)\n"
+                }
+                
+                if !extendedInfo.isEmpty {
+                    if cdProtocol.notes != nil {
+                        cdProtocol.notes = cdProtocol.notes! + "\n\n---EXTENDED_DATA---\n" + extendedInfo
+                    } else {
+                        cdProtocol.notes = "---EXTENDED_DATA---\n" + extendedInfo
+                    }
+                }
+                
+                // Create blood samples
+                for sample in p.bloodSamples {
+                    let cdSample = CDBloodSample(context: context)
+                    cdSample.id = sample.id
+                    cdSample.date = sample.date
+                    cdSample.value = sample.value
+                    cdSample.unit = sample.unit
+                    
+                    cdProtocol.addToBloodSamples(cdSample)
+                }
+                
+                cdProfile.addToProtocols(cdProtocol)
             }
             
             // Save to Core Data
@@ -199,10 +242,10 @@ class CoreDataManager {
             
             // Mark as migrated
             UserDefaults.standard.set(true, forKey: "migrated")
-            print("Successfully migrated user profile from JSON to Core Data using unified Treatment model")
+            print("Successfully migrated user profile from JSON to Core Data")
             
         } catch {
             print("Error migrating from JSON: \(error)")
         }
     }
-}
+} 

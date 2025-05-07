@@ -1,0 +1,411 @@
+import SwiftUI
+import Charts
+
+struct CyclePlannerView: View {
+    @EnvironmentObject var dataStore: AppDataStore
+    @State private var isPresentingNewCycleForm = false
+    @State private var isPresentingStageForm = false
+    @State private var selectedTreatment: Treatment?
+    @State private var selectedStageID: UUID?
+    @State private var zoomLevel: Double = 1.0
+    @State private var weekViewWidth: CGFloat = 70
+    
+    var body: some View {
+        VStack {
+            if advancedTreatments.isEmpty {
+                emptyTreatmentsView
+            } else {
+                treatmentListView
+            }
+        }
+        .navigationTitle("Advanced Treatment Planner")
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button(action: {
+                    isPresentingNewCycleForm = true
+                }) {
+                    Label("Add Treatment", systemImage: "plus")
+                }
+            }
+        }
+        .sheet(isPresented: $isPresentingNewCycleForm) {
+            TreatmentFormView(
+                isPresented: $isPresentingNewCycleForm,
+                viewModel: dataStore.treatmentFormAdapter.viewModel,
+                compoundLibrary: dataStore.compoundLibrary
+            )
+        }
+        .sheet(item: $selectedTreatment) { treatment in
+            TreatmentDetailView(treatment: treatment)
+        }
+    }
+    
+    private var advancedTreatments: [Treatment] {
+        dataStore.treatments.filter { $0.treatmentType == .advanced }
+    }
+    
+    private var emptyTreatmentsView: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "calendar.badge.plus")
+                .font(.system(size: 60))
+                .foregroundColor(.secondary)
+            
+            Text("No Advanced Treatments Yet")
+                .font(.title2)
+                .bold()
+            
+            Text("Create your first advanced treatment to plan and visualize multi-compound regimens.")
+                .font(.body)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
+                .foregroundColor(.secondary)
+            
+            Button(action: {
+                isPresentingNewCycleForm = true
+            }) {
+                Text("Create Treatment")
+                    .font(.headline)
+                    .padding()
+                    .background(Color.accentColor)
+                    .foregroundColor(.white)
+                    .cornerRadius(10)
+            }
+            .padding()
+        }
+        .padding()
+    }
+    
+    private var treatmentListView: some View {
+        List {
+            treatmentListSection
+            
+            simulationResultsSection
+        }
+    }
+    
+    private var treatmentListSection: some View {
+        Section(header: Text("My Advanced Treatments")) {
+            treatmentRows
+        }
+    }
+    
+    private var treatmentRows: some View {
+        ForEach(advancedTreatments) { treatment in
+            treatmentRow(for: treatment)
+        }
+        .onDelete(perform: handleDelete)
+    }
+    
+    private func treatmentRow(for treatment: Treatment) -> some View {
+        TreatmentRowView(treatment: treatment)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                dataStore.selectedTreatmentID = treatment.id
+                dataStore.selectTreatment(id: treatment.id)
+                selectedTreatment = treatment
+            }
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(dataStore.selectedTreatmentID == treatment.id ? Color.accentColor.opacity(0.1) : Color.clear)
+            )
+    }
+    
+    private func handleDelete(at indexSet: IndexSet) {
+        let treatmentsToDelete = indexSet.map { advancedTreatments[$0] }
+        for treatment in treatmentsToDelete {
+            dataStore.deleteTreatment(with: treatment.id)
+        }
+    }
+    
+    private var simulationResultsSection: some View {
+        Group {
+            if !dataStore.treatmentSimulationData.isEmpty, 
+               let selectedID = dataStore.selectedTreatmentID,
+               advancedTreatments.contains(where: { $0.id == selectedID }) {
+                Section(header: Text("Simulation Results")) {
+                    VStack(alignment: .leading) {
+                        Text("Combined Concentration Curve")
+                            .font(.headline)
+                            .padding(.bottom, 5)
+                        
+                        TreatmentChartView(simulationData: dataStore.treatmentSimulationData)
+                            .frame(height: 200)
+                    }
+                    .padding(.vertical)
+                }
+            }
+        }
+    }
+}
+
+struct TreatmentRowView: View {
+    let treatment: Treatment
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(treatment.name)
+                .font(.headline)
+            
+            HStack {
+                Text("Start: \(formatDate(treatment.startDate))")
+                Spacer()
+                Text("\(treatment.totalWeeks ?? 0) weeks")
+            }
+            .font(.subheadline)
+            .foregroundColor(.secondary)
+            
+            Text("\(treatment.stages?.count ?? 0) stages")
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
+        .padding(.vertical, 4)
+    }
+    
+    private func formatDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        return formatter.string(from: date)
+    }
+}
+
+struct TreatmentChartView: View {
+    let simulationData: [DataPoint]
+    
+    var body: some View {
+        Chart {
+            ForEach(simulationData, id: \.time) { dataPoint in
+                LineMark(
+                    x: .value("Date", dataPoint.time),
+                    y: .value("Level", dataPoint.level)
+                )
+                .interpolationMethod(.catmullRom)
+                .foregroundStyle(Color.blue.gradient)
+            }
+        }
+        .chartXAxis {
+            AxisMarks(values: .stride(by: .day, count: 7)) { _ in
+                AxisGridLine()
+                AxisTick()
+                AxisValueLabel(format: .dateTime.day().month())
+            }
+        }
+        .chartYAxis {
+            AxisMarks(position: .leading)
+        }
+    }
+}
+
+// Treatment Detail View
+struct TreatmentDetailView: View {
+    let treatment: Treatment
+    @EnvironmentObject var dataStore: AppDataStore
+    @State private var isPresentingEditForm = false
+    @State private var isPresentingStageForm = false
+    
+    var body: some View {
+        NavigationView {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    // Treatment information
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(treatment.name)
+                            .font(.title)
+                            .bold()
+                        
+                        HStack {
+                            Text("Start: \(formatDate(treatment.startDate))")
+                            Spacer()
+                            Text("End: \(formatDate(treatment.endDate))")
+                        }
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        
+                        if let notes = treatment.notes, !notes.isEmpty {
+                            Text(notes)
+                                .font(.body)
+                                .padding(.top, 4)
+                        }
+                    }
+                    .padding()
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(Color(.secondarySystemBackground))
+                    )
+                    .padding(.horizontal)
+                    
+                    // Stages Timeline
+                    if treatment.stages?.isEmpty ?? true {
+                        emptyStagesView
+                    } else {
+                        stagesTimelineView
+                    }
+                    
+                    // Simulation Results
+                    if !dataStore.treatmentSimulationData.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Simulation Results")
+                                .font(.headline)
+                                .padding(.bottom, 5)
+                            
+                            TreatmentChartView(simulationData: dataStore.treatmentSimulationData)
+                                .frame(height: 200)
+                        }
+                        .padding()
+                        .background(
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(Color(.secondarySystemBackground))
+                        )
+                        .padding(.horizontal)
+                    }
+                    
+                    Spacer()
+                }
+                .padding(.vertical)
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button(action: {
+                        isPresentingEditForm = true
+                    }) {
+                        Text("Edit")
+                    }
+                }
+                
+                ToolbarItem(placement: .primaryAction) {
+                    Button(action: {
+                        isPresentingStageForm = true
+                    }) {
+                        Label("Add Stage", systemImage: "plus")
+                    }
+                }
+            }
+            .sheet(isPresented: $isPresentingStageForm) {
+                CycleStageFormView(isPresented: $isPresentingStageForm, treatment: treatment)
+                    .environmentObject(dataStore)
+            }
+            .sheet(isPresented: $isPresentingEditForm) {
+                TreatmentFormView(
+                    isPresented: $isPresentingEditForm,
+                    viewModel: dataStore.treatmentFormAdapter.viewModel,
+                    compoundLibrary: dataStore.compoundLibrary,
+                    treatment: treatment
+                )
+            }
+        }
+    }
+    
+    private var emptyStagesView: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "calendar.badge.plus")
+                .font(.system(size: 40))
+                .foregroundColor(.secondary)
+            
+            Text("No Stages Yet")
+                .font(.headline)
+            
+            Text("Add stages to build your treatment timeline")
+                .font(.subheadline)
+                .multilineTextAlignment(.center)
+                .foregroundColor(.secondary)
+            
+            Button(action: {
+                isPresentingStageForm = true
+            }) {
+                Text("Add Stage")
+                    .font(.headline)
+                    .padding()
+                    .background(Color.accentColor)
+                    .foregroundColor(.white)
+                    .cornerRadius(10)
+            }
+        }
+        .padding()
+        .frame(maxWidth: .infinity)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color(.secondarySystemBackground))
+        )
+        .padding(.horizontal)
+    }
+    
+    private var stagesTimelineView: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Timeline")
+                .font(.headline)
+                .padding(.bottom, 5)
+            
+            if let stages = treatment.stages, !stages.isEmpty {
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(stages) { stage in
+                        stageRow(for: stage)
+                    }
+                }
+            } else {
+                Text("No stages defined")
+                    .italic()
+                    .foregroundColor(.secondary)
+            }
+        }
+        .padding()
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color(.secondarySystemBackground))
+        )
+        .padding(.horizontal)
+    }
+    
+    private func stageRow(for stage: TreatmentStage) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(stage.name)
+                .font(.headline)
+            
+            HStack {
+                Text("Week \(stage.startWeek + 1) - \(stage.startWeek + stage.durationWeeks)")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                
+                Spacer()
+                
+                HStack(spacing: 4) {
+                    if !stage.compounds.isEmpty {
+                        Text("\(stage.compounds.count) compounds")
+                            .font(.caption)
+                    }
+                    
+                    if !stage.blends.isEmpty {
+                        Text("\(stage.blends.count) blends")
+                            .font(.caption)
+                    }
+                }
+                .foregroundColor(.secondary)
+            }
+        }
+        .padding()
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color.gray.opacity(0.1))
+        )
+        .contentShape(Rectangle())
+        .onTapGesture {
+            // Edit stage
+            selectedStageID = stage.id
+            isPresentingStageForm = true
+        }
+    }
+    
+    private func formatDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        return formatter.string(from: date)
+    }
+}
+
+struct CyclePlannerView_Previews: PreviewProvider {
+    static var previews: some View {
+        CyclePlannerView()
+            .environmentObject(AppDataStore())
+    }
+}

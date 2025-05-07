@@ -4,6 +4,13 @@ TestoSim is a testosterone pharmacokinetics simulation app that helps visualize 
 
 ## Recent Changes and Updates
 
+### Unified Treatment Model (July 2024)
+- **Unified Model Architecture**: Implemented a new Treatment model that unifies InjectionProtocol and Cycle concepts, simplifying the architecture
+- **Advanced Visualization System**: Created multi-layered visualizations with comprehensive effect indices
+- **Improved User Interface**: Streamlined UI for both simple and advanced treatments
+- **Enhanced Data Model**: Added support for bidirectional conversion between legacy and new models
+- **Core Data Optimization**: Improved persistence layer with better relationships and efficient storage
+
 ### Model Refinements (June 2024)
 - **Removed TestosteroneEster Model**: Simplified the codebase by removing the redundant TestosteroneEster model in favor of the more flexible Compound model
 - **Protocol Type Selection**: Protocols now clearly identify as either compound-based or blend-based
@@ -12,7 +19,36 @@ TestoSim is a testosterone pharmacokinetics simulation app that helps visualize 
 - **Calibration View Fixes**: Resolved compiler issues with CalibrationResultView and parameter naming conflicts
 - **Code Cleanup**: Fixed various Swift compiler warnings and improved view composition to avoid "unable to type-check" errors
 
-The app now provides a more consistent experience when creating and managing protocols, with proper support for different compound types and routes of administration.
+The app now provides a more consistent experience when creating and managing treatments, with proper support for different compound types, routes of administration, and advanced multi-stage treatment plans.
+
+## Model Architecture
+
+### Unified Treatment Model
+
+TestoSim now uses a unified `Treatment` model that encompasses both simple and advanced hormone protocols:
+
+#### Key Components:
+
+- **Treatment**: The core model that can represent:
+  - Simple treatments (single compound/blend with fixed schedule)
+  - Advanced treatments (multi-stage treatments with varying compounds and schedules)
+
+- **TreatmentStage**: A component of advanced treatments that represents:
+  - A distinct phase with specific start and duration
+  - Multiple compounds and/or blends at different doses and frequencies
+
+- **VisualizationModel**: A multi-layered visualization system:
+  - Individual compound pharmacokinetics
+  - Total concentration curve
+  - Anabolic and androgenic effect indices
+  - Layer management for custom visualization
+
+#### Benefits:
+
+- **Simplified Architecture**: Single model for all types of treatment plans
+- **Improved Consistency**: Unified approach to simulation and visualization
+- **Enhanced Flexibility**: Support for both simple and complex treatment scenarios
+- **Future Extensibility**: Designed to easily accommodate new metrics and visualization layers
 
 ## Simulator Management
 
@@ -78,11 +114,11 @@ xcrun simctl spawn booted log stream --predicate 'processImagePath contains "Tes
 
 ## CloudKit Integration
 
-TestoSim uses CloudKit for cloud data synchronization across devices. This allows users to access their protocols, compounds, and bloodwork results on all their iOS devices.
+TestoSim uses CloudKit for cloud data synchronization across devices. This allows users to access their treatments, compounds, and bloodwork results on all their iOS devices.
 
 ### Key Features
 
-- User profiles, protocols, and bloodwork data synchronize across devices
+- User profiles, treatments, and bloodwork data synchronize across devices
 - Automatic conflict resolution and merging
 - Offline capability with sync when connectivity is restored
 
@@ -130,7 +166,7 @@ TestoSim uses a comprehensive system for selecting compounds:
 
 ## API Key Configuration
 
-The TestoSim app uses OpenAI's API for generating insights about hormone protocols and cycles. The app includes a free test API key with a $20 spending limit for all users.
+The TestoSim app uses OpenAI's API for generating insights about hormone treatments and protocols. The app includes a free test API key with a $20 spending limit for all users.
 
 ### For Developers
 
