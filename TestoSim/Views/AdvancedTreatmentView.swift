@@ -1,4 +1,5 @@
 import SwiftUI
+import Charts
 
 struct AdvancedTreatmentView: View {
     @EnvironmentObject var dataStore: AppDataStore
@@ -254,11 +255,9 @@ struct TreatmentDetailPanel: View {
             stagesList
             
             // Visualization
-            if let id = treatment.id {
-                TestosteroneChart(simulationData: dataStore.treatmentSimulationData)
-                    .frame(height: 300)
-                    .padding()
-            }
+            TreatmentSimulationChart(simulationData: dataStore.treatmentSimulationData)
+                .frame(height: 300)
+                .padding()
         }
         .background(Color(.systemBackground))
     }

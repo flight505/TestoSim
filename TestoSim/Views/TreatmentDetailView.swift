@@ -1,4 +1,5 @@
 import SwiftUI
+import Charts
 
 struct TreatmentDetailView_Updated: View {
     @EnvironmentObject var dataStore: AppDataStore
@@ -410,8 +411,8 @@ struct TreatmentDetailView_Updated: View {
     }
 }
 
-// Using the imported TestosteroneChart from the TestosteroneChart.swift file
-private struct TreatmentSimulationChart: View {
+// Simple chart implementation (legacy version, using the imported TreatmentSimulationChart instead)
+private struct SimpleTreatmentChart: View {
     let simulationData: [DataPoint]
     
     var body: some View {
